@@ -1046,7 +1046,7 @@ export class QualityGates {
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     
     for (const exec of executions) {
-      const testerName = exec.lastTestResult?.testerName || exec.testerName || "Unassigned";
+      const testerName = exec.testerIdName?.trim() || exec.lastTestResult?.testerName || exec.testerName || "Unassigned";
       const testerId = exec.testerId || exec.lastTestResult?.testerId;
       const executedOn = exec.lastTestResult?.executedOn || exec.executedOn;
       
