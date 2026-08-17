@@ -1,0 +1,44 @@
+{
+  "servers": {
+    "zephyr-enterprise": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "zephyr-enterprise-tools@latest"
+      ],
+      "env": {
+        "ZEPHYR_BASE_URL": "${input:zephyr_base_url}",
+        "ZEPHYR_USERNAME": "${input:zephyr_username}",
+        "ZEPHYR_PASSWORD": "${input:zephyr_password}",
+        "ZEPHYR_TOKEN": "${input:zephyr_token}"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "id": "zephyr_base_url",
+      "type": "promptString",
+      "description": "Zephyr Enterprise API Base URL (e.g. https://your-zephyr.com/flex/services/rest/latest)",
+      "password": false
+    },
+    {
+      "id": "zephyr_username",
+      "type": "promptString",
+      "description": "Zephyr Enterprise Username (for Basic Auth)",
+      "password": false
+    },
+    {
+      "id": "zephyr_password",
+      "type": "promptString",
+      "description": "Zephyr Enterprise Password (for Basic Auth)",
+      "password": true
+    },
+    {
+      "id": "zephyr_token",
+      "type": "promptString",
+      "description": "Zephyr Enterprise Bearer Token (alternative to username/password)",
+      "password": true
+    }
+  ]
+}
