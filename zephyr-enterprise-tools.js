@@ -557,23 +557,48 @@ export class QualityGates {
     const tcData = summary.testcase || {};
     const totalTestcases = tcData.totalTestcaseCount || 0;
     
-    // Execution metrics
-    const execData = summary.execution || {};
-    const totalExecutions = execData.totalExecutionCount || 0;
-    const passedCount = execData.passedExecutionCount || 0;
-    const failedCount = execData.failedExecutionCount || 0;
-    const blockedCount = execData.blockedExecutionCount || 0;
-    const wipCount = execData.wipExecutionCount || 0;
-    const notExecutedCount = execData.unexecutedCount || 0;
+    // Fetch actual execution data
+    const executionData = await this.GET("/execution", {
+      releaseid: releaseId,
+      offset: 0,
+      pagesize: 10000,
+      includeanyoneuser: true,
+    });
+    
+    const executions = executionData.results || executionData || [];
+    const totalExecutions = executions.length;
+    
+    // Count by status
+    let passedCount = 0, failedCount = 0, blockedCount = 0, wipCount = 0, notExecutedCount = 0;
+    for (const exec of executions) {
+      const status = Number(exec.lastTestResult?.executionStatus || exec.status || 0);
+      switch (status) {
+        case 1: passedCount++; break;
+        case 2: failedCount++; break;
+        case 3: wipCount++; break;
+        case 4: blockedCount++; break;
+        default: notExecutedCount++; break;
+      }
+    }
     
     const completedExecutions = passedCount + failedCount;
     const executionRate = totalExecutions > 0 ? Math.round((completedExecutions / totalExecutions) * 100 * 100) / 100 : 0;
     const passRate = completedExecutions > 0 ? Math.round((passedCount / completedExecutions) * 100 * 100) / 100 : 0;
     
-    // Defect metrics
+    // Defect metrics - count open defects from status
     const defectData = summary.defect || {};
     const totalDefects = defectData.totalDefectCount || 0;
-    const openDefects = defectData.openDefectCount || totalDefects;
+    let openDefects = 0;
+    if (defectData.statuses) {
+      for (const s of defectData.statuses) {
+        const statusName = (s.status || '').toLowerCase();
+        if (!statusName.includes('done') && !statusName.includes('closed') && !statusName.includes('resolved')) {
+          openDefects += s.defectCount || 0;
+        }
+      }
+    } else {
+      openDefects = totalDefects;
+    }
     
     // Calculate health score (0-100)
     const reqScore = reqCoverage;
