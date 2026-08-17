@@ -15,16 +15,18 @@
  *   zephyr-tools mcp   # Start MCP server
  */
 
+import QualityGates from './zephyr-enterprise-tools.js';
+
 // Check if MCP server mode
 if (process.argv[2] === 'mcp') {
   import('./mcp-server.js');
 } else {
-  // Normal CLI mode
-  runCLI();
+  main().catch(err => {
+    console.error(`Error: ${err.message}`);
+    if (process.env.DEBUG) console.error(err.stack);
+    process.exit(1);
+  });
 }
-
-async function runCLI() {
-  const { default: QualityGates } = await import('./zephyr-enterprise-tools.js');
 
 // ─── Parse Arguments ──────────────────────────────────────────────────────────
 
@@ -545,6 +547,3 @@ async function main() {
     process.exit(1);
   }
 }
-
-main();
-} // end runCLI
