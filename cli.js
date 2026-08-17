@@ -251,6 +251,23 @@ function formatGenericResult(result) {
     console.log(`\nHealth Score: ${icon} ${result.healthScore}/100 (${result.healthStatus})`);
   }
   
+  // Project Summary from v3 API (new section)
+  if (result.projectSummary) {
+    const ps = result.projectSummary;
+    console.log('\n📊 PROJECT SUMMARY (from v3 API):');
+    console.log(`   ┌─────────────────────────────┬──────────────┐`);
+    console.log(`   │ Total Releases              │ ${String(ps.totalReleaseCount).padStart(12)} │`);
+    console.log(`   │ Visible Releases            │ ${String(ps.visibleReleaseCount).padStart(12)} │`);
+    console.log(`   │ Total Test Cases            │ ${String(ps.testcaseCount).padStart(12)} │`);
+    console.log(`   │ Total Executions            │ ${String(ps.executionCount).padStart(12)} │`);
+    console.log(`   │ Team Members                │ ${String(ps.teamCount).padStart(12)} │`);
+    console.log(`   ├─────────────────────────────┼──────────────┤`);
+    console.log(`   │ Automated Test Cases        │ ${String(ps.automatedTestCaseCount).padStart(12)} │`);
+    console.log(`   │ Manual Test Cases           │ ${String(ps.manualTestCaseCount).padStart(12)} │`);
+    console.log(`   │ Automation Percentage       │ ${String(ps.automationPercentage + '%').padStart(12)} │`);
+    console.log(`   └─────────────────────────────┴──────────────┘`);
+  }
+  
   // Summary section
   if (result.summary) {
     console.log('\n📊 SUMMARY:');
@@ -278,6 +295,8 @@ function formatGenericResult(result) {
     console.log(`   Name: ${p.name}`);
     if (p.description) console.log(`   Description: ${p.description}`);
     if (p.startDate) console.log(`   Start Date: ${p.startDate}`);
+    if (p.endDate) console.log(`   End Date: ${p.endDate}`);
+    if (p.teamCount) console.log(`   Team Count: ${p.teamCount}`);
     
     // Members
     console.log(`\n👥 PROJECT MEMBERS (${p.totalMembers}):`);
@@ -291,7 +310,7 @@ function formatGenericResult(result) {
     }
     
     // Releases
-    console.log(`\n📦 RELEASES (${p.totalReleases}):`);
+    console.log(`\n📦 RELEASES (${p.totalReleases}${p.visibleReleases ? `, ${p.visibleReleases} visible` : ''}):`);
     if (p.releases && p.releases.length > 0) {
       for (const rel of p.releases) {
         const current = rel.isCurrent ? ' ⬅ CURRENT' : '';

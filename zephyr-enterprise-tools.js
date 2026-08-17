@@ -95,6 +95,24 @@ export class QualityGates {
     return this.request("GET", path, params);
   }
 
+  async GETv3(path, params = {}) {
+    // Build v3 URL by replacing /latest with /v3 in baseUrl
+    const v3BaseUrl = this.baseUrl.replace('/latest', '/v3');
+    const url = new URL(`${v3BaseUrl}${path}`);
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
+    }
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: { Accept: "application/json", "Content-Type": "application/json", ...this.authHeader() },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Zephyr v3 API ${res.status}: ${text}`);
+    }
+    return res.json();
+  }
+
   async PUT(path, params, body) {
     const url = new URL(`${this.baseUrl}${path}`);
     for (const [k, v] of Object.entries(params)) {
@@ -545,11 +563,12 @@ export class QualityGates {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async getProjectHealth(projectId, releaseId) {
-    // Fetch project details, releases in parallel
-    const [summary, project, allReleases] = await Promise.all([
-      this.GET(`/summary/release/${releaseId}`, { isHideCycleEnabled: false }),
+    // Fetch project details using v3 summary API, project info, and releases in parallel
+    const [projectSummary, project, allReleases, releaseSummary] = await Promise.all([
+      this.GETv3(`/summary/project/${projectId}`, { isLite: false }),
       this.GET(`/project/${projectId}`),
       this.GET('/release', { projectid: projectId, isaliasallowed: false }).catch(() => []),
+      this.GET(`/summary/release/${releaseId}`, { isHideCycleEnabled: false }),
     ]);
     
     // Filter releases for this project (exclude "Project Test Repository")
@@ -559,7 +578,7 @@ export class QualityGates {
     // Get project members and fetch their details
     const projectMembers = project.members || [];
     const memberDetails = await Promise.all(
-      projectMembers.map(async (m) => {
+      projectMembers.slice(0, 20).map(async (m) => {
         try {
           const user = await this.GET(`/user/${m.userId}`);
           return {
@@ -578,46 +597,24 @@ export class QualityGates {
       })
     );
     
-    // Requirements metrics
-    const reqData = summary.requirement || {};
+    // Project-level metrics from v3 API
+    const totalTestcases = projectSummary.testcaseCount || 0;
+    const totalExecutions = projectSummary.executionCount || 0;
+    const automatedTestCases = projectSummary.automatedTestCaseCount || 0;
+    const manualTestCases = projectSummary.manualTestCaseCount || 0;
+    const automationPercentage = projectSummary.automationPercentage || 0;
+    const teamCount = projectSummary.teamCount || 0;
+    const totalReleaseCount = projectSummary.totalReleaseCount || 0;
+    const visibleReleaseCount = projectSummary.visibleReleaseCount || 0;
+    
+    // Requirements metrics from release summary
+    const reqData = releaseSummary.requirement || {};
     const totalReqs = reqData.totalRequirementCount || 0;
     const mappedReqs = reqData.mappedRequirementCount || 0;
     const reqCoverage = totalReqs > 0 ? Math.round((mappedReqs / totalReqs) * 100 * 100) / 100 : 0;
     
-    // Test case metrics
-    const tcData = summary.testcase || {};
-    const totalTestcases = tcData.totalTestcaseCount || 0;
-    
-    // Fetch actual execution data
-    const executionData = await this.GET("/execution", {
-      releaseid: releaseId,
-      offset: 0,
-      pagesize: 10000,
-      includeanyoneuser: true,
-    });
-    
-    const executions = executionData.results || executionData || [];
-    const totalExecutions = executions.length;
-    
-    // Count by status
-    let passedCount = 0, failedCount = 0, blockedCount = 0, wipCount = 0, notExecutedCount = 0;
-    for (const exec of executions) {
-      const status = Number(exec.lastTestResult?.executionStatus || exec.status || 0);
-      switch (status) {
-        case 1: passedCount++; break;
-        case 2: failedCount++; break;
-        case 3: wipCount++; break;
-        case 4: blockedCount++; break;
-        default: notExecutedCount++; break;
-      }
-    }
-    
-    const completedExecutions = passedCount + failedCount;
-    const executionRate = totalExecutions > 0 ? Math.round((completedExecutions / totalExecutions) * 100 * 100) / 100 : 0;
-    const passRate = completedExecutions > 0 ? Math.round((passedCount / completedExecutions) * 100 * 100) / 100 : 0;
-    
-    // Defect metrics - count open defects from status
-    const defectData = summary.defect || {};
+    // Defect metrics from release summary
+    const defectData = releaseSummary.defect || {};
     const totalDefects = defectData.totalDefectCount || 0;
     let openDefects = 0;
     if (defectData.statuses) {
@@ -632,13 +629,12 @@ export class QualityGates {
     }
     
     // Calculate health score (0-100)
+    const automationScore = automationPercentage;
     const reqScore = reqCoverage;
-    const execScore = executionRate;
-    const passScore = passRate;
-    const defectPenalty = Math.min(30, openDefects * 3); // Penalty for open defects
+    const defectPenalty = Math.min(20, openDefects * 2);
     
     const healthScore = Math.max(0, Math.round(
-      (reqScore * 0.25 + execScore * 0.35 + passScore * 0.40) - defectPenalty
+      (automationScore * 0.35 + reqScore * 0.35 + (100 - defectPenalty * 2) * 0.30)
     ));
     
     let healthStatus;
@@ -654,6 +650,16 @@ export class QualityGates {
       timestamp: new Date().toISOString(),
       healthScore,
       healthStatus,
+      projectSummary: {
+        totalReleaseCount,
+        visibleReleaseCount,
+        testcaseCount: totalTestcases,
+        executionCount: totalExecutions,
+        teamCount,
+        automatedTestCaseCount: automatedTestCases,
+        manualTestCaseCount: manualTestCases,
+        automationPercentage,
+      },
       metrics: {
         requirements: {
           total: totalReqs,
@@ -663,16 +669,12 @@ export class QualityGates {
         },
         testCases: {
           total: totalTestcases,
+          automated: automatedTestCases,
+          manual: manualTestCases,
+          automationPercentage,
         },
         executions: {
           total: totalExecutions,
-          passed: passedCount,
-          failed: failedCount,
-          blocked: blockedCount,
-          wip: wipCount,
-          notExecuted: notExecutedCount,
-          executionRate,
-          passRate,
         },
         defects: {
           total: totalDefects,
@@ -684,9 +686,12 @@ export class QualityGates {
         name: project.name || 'Unknown',
         description: project.description || '',
         startDate: project.projectStartDate,
-        totalMembers: memberDetails.length,
+        endDate: project.projectEndDate,
+        totalMembers: projectMembers.length,
         members: memberDetails,
-        totalReleases: projectReleases.length,
+        teamCount,
+        totalReleases: totalReleaseCount,
+        visibleReleases: visibleReleaseCount,
         releases: projectReleases.map(r => ({
           id: r.id,
           name: r.name,
@@ -695,7 +700,7 @@ export class QualityGates {
           isCurrent: r.id === releaseId,
         })),
       },
-      recommendations: this.getHealthRecommendations(healthScore, reqCoverage, executionRate, passRate, openDefects),
+      recommendations: this.getHealthRecommendations(healthScore, reqCoverage, automationPercentage, 0, openDefects),
     };
   }
 
