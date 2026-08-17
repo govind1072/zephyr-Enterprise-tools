@@ -55,6 +55,113 @@ export ZEPHYR_TOKEN="your-token"
 
 ---
 
+## 🤖 MCP Integration
+
+Use zephyr-enterprise-tools as an MCP (Model Context Protocol) server with your AI assistant.
+
+### VS Code with GitHub Copilot
+
+Create or edit `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "zephyr-enterprise": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "zephyr-enterprise-tools@latest"
+      ],
+      "env": {
+        "ZEPHYR_BASE_URL": "${input:zephyr_base_url}",
+        "ZEPHYR_USERNAME": "${input:zephyr_username}",
+        "ZEPHYR_PASSWORD": "${input:zephyr_password}",
+        "ZEPHYR_TOKEN": "${input:zephyr_token}"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "id": "zephyr_base_url",
+      "type": "promptString",
+      "description": "Zephyr Enterprise API Base URL (e.g. https://your-zephyr.com/flex/services/rest/latest)",
+      "password": false
+    },
+    {
+      "id": "zephyr_username",
+      "type": "promptString",
+      "description": "Zephyr Enterprise Username (for Basic Auth)",
+      "password": false
+    },
+    {
+      "id": "zephyr_password",
+      "type": "promptString",
+      "description": "Zephyr Enterprise Password (for Basic Auth)",
+      "password": true
+    },
+    {
+      "id": "zephyr_token",
+      "type": "promptString",
+      "description": "Zephyr Enterprise Bearer Token (alternative to username/password)",
+      "password": true
+    }
+  ]
+}
+```
+
+### Cursor
+
+Add to your `mcp.json` configuration:
+
+```json
+{
+  "mcpServers": {
+    "zephyr-enterprise": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "zephyr-enterprise-tools@latest"
+      ],
+      "env": {
+        "ZEPHYR_BASE_URL": "https://your-zephyr.com/flex/services/rest/latest",
+        "ZEPHYR_USERNAME": "your-username",
+        "ZEPHYR_PASSWORD": "your-password",
+        "ZEPHYR_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Edit your `claude_desktop_config.json` file:
+
+```json
+{
+  "mcpServers": {
+    "zephyr-enterprise": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "zephyr-enterprise-tools@latest"
+      ],
+      "env": {
+        "ZEPHYR_BASE_URL": "https://your-zephyr.com/flex/services/rest/latest",
+        "ZEPHYR_USERNAME": "your-username",
+        "ZEPHYR_PASSWORD": "your-password",
+        "ZEPHYR_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+> **Note:** Use either `ZEPHYR_USERNAME` + `ZEPHYR_PASSWORD` for Basic Auth, or `ZEPHYR_TOKEN` for Bearer token authentication.
+
+---
+
 ## 🖥️ CLI Usage
 
 ```bash
