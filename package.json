@@ -8,8 +8,8 @@
     "./cli": "./cli.js"
   },
   "bin": {
-    "zephyr-gates": "./cli.js",
-    "zephyr-tools": "./cli.js"
+    "zephyr-gates": "cli.js",
+    "zephyr-tools": "cli.js"
   },
   "type": "module",
   "scripts": {

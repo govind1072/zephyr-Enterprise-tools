@@ -32,10 +32,10 @@ Comprehensive tools for Zephyr Enterprise - Release Readiness, Project Health, T
 
 ```bash
 # Install from npm
-npm install -g zephyr-Enterprise-tools
+npm install -g zephyr-enterprise-tools
 
 # Or install locally
-npm install zephyr-Enterprise-tools
+npm install zephyr-enterprise-tools
 ```
 
 ---
