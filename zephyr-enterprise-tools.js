@@ -545,7 +545,38 @@ export class QualityGates {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async getProjectHealth(projectId, releaseId) {
-    const summary = await this.GET(`/summary/release/${releaseId}`, { isHideCycleEnabled: false });
+    // Fetch project details, releases in parallel
+    const [summary, project, allReleases] = await Promise.all([
+      this.GET(`/summary/release/${releaseId}`, { isHideCycleEnabled: false }),
+      this.GET(`/project/${projectId}`),
+      this.GET('/release', { projectid: projectId, isaliasallowed: false }).catch(() => []),
+    ]);
+    
+    // Filter releases for this project (exclude "Project Test Repository")
+    const projectReleases = (Array.isArray(allReleases) ? allReleases : [])
+      .filter(r => r.projectId === projectId && !r.projectRelease);
+    
+    // Get project members and fetch their details
+    const projectMembers = project.members || [];
+    const memberDetails = await Promise.all(
+      projectMembers.map(async (m) => {
+        try {
+          const user = await this.GET(`/user/${m.userId}`);
+          return {
+            userId: m.userId,
+            name: user.fullName || `${user.firstName} ${user.lastName}`.trim(),
+            username: user.username,
+            role: m.role?.name || 'Unknown',
+          };
+        } catch (e) {
+          return {
+            userId: m.userId,
+            name: `User ${m.userId}`,
+            role: m.role?.name || 'Unknown',
+          };
+        }
+      })
+    );
     
     // Requirements metrics
     const reqData = summary.requirement || {};
@@ -647,6 +678,22 @@ export class QualityGates {
           total: totalDefects,
           open: openDefects,
         },
+      },
+      project: {
+        id: projectId,
+        name: project.name || 'Unknown',
+        description: project.description || '',
+        startDate: project.projectStartDate,
+        totalMembers: memberDetails.length,
+        members: memberDetails,
+        totalReleases: projectReleases.length,
+        releases: projectReleases.map(r => ({
+          id: r.id,
+          name: r.name,
+          startDate: r.releaseStartDate,
+          endDate: r.releaseEndDate,
+          isCurrent: r.id === releaseId,
+        })),
       },
       recommendations: this.getHealthRecommendations(healthScore, reqCoverage, executionRate, passRate, openDefects),
     };

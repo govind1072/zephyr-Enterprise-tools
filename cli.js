@@ -271,6 +271,38 @@ function formatGenericResult(result) {
     }
   }
   
+  // Project info section
+  if (result.project) {
+    const p = result.project;
+    console.log(`\n🏢 PROJECT INFO:`);
+    console.log(`   Name: ${p.name}`);
+    if (p.description) console.log(`   Description: ${p.description}`);
+    if (p.startDate) console.log(`   Start Date: ${p.startDate}`);
+    
+    // Members
+    console.log(`\n👥 PROJECT MEMBERS (${p.totalMembers}):`);
+    if (p.members && p.members.length > 0) {
+      for (const member of p.members.slice(0, 10)) {
+        console.log(`   • ${member.name} (${member.role})`);
+      }
+      if (p.totalMembers > 10) console.log(`   ... and ${p.totalMembers - 10} more`);
+    } else {
+      console.log(`   No members assigned to this project`);
+    }
+    
+    // Releases
+    console.log(`\n📦 RELEASES (${p.totalReleases}):`);
+    if (p.releases && p.releases.length > 0) {
+      for (const rel of p.releases) {
+        const current = rel.isCurrent ? ' ⬅ CURRENT' : '';
+        const dates = rel.startDate && rel.endDate ? ` (${rel.startDate} - ${rel.endDate})` : '';
+        console.log(`   • ${rel.name} [ID: ${rel.id}]${dates}${current}`);
+      }
+    } else {
+      console.log(`   No releases found`);
+    }
+  }
+  
   // Team summary
   if (result.teamSummary) {
     console.log('\n👥 TEAM SUMMARY:');
