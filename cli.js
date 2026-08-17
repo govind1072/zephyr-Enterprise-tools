@@ -279,7 +279,35 @@ function formatGenericResult(result) {
     }
   }
   
-  // Users list
+  // Assigned To list (for User Activity)
+  if (result.assignedTo && result.assignedTo.length > 0) {
+    console.log('\n📋 ASSIGNED TO:');
+    console.log('   ┌─────────────────────────┬────────┬────────┬────────┬────────┐');
+    console.log('   │ User                    │ Assign │ Exec   │ Pass%  │ Comp%  │');
+    console.log('   ├─────────────────────────┼────────┼────────┼────────┼────────┤');
+    for (const user of result.assignedTo.slice(0, 10)) {
+      const name = (user.name || 'Unknown').substring(0, 21).padEnd(23);
+      console.log(`   │ ${name} │ ${String(user.assigned).padEnd(6)} │ ${String(user.executed).padEnd(6)} │ ${String(user.passRate + '%').padEnd(6)} │ ${String(user.completionRate + '%').padEnd(6)} │`);
+    }
+    console.log('   └─────────────────────────┴────────┴────────┴────────┴────────┘');
+    if (result.assignedTo.length > 10) console.log(`   ... and ${result.assignedTo.length - 10} more`);
+  }
+  
+  // Executed By list (for User Activity)
+  if (result.executedBy && result.executedBy.length > 0) {
+    console.log('\n🏃 EXECUTED BY:');
+    console.log('   ┌─────────────────────────┬────────┬────────┬────────┬─────────┐');
+    console.log('   │ User                    │ Exec   │ Passed │ Failed │ Pass%   │');
+    console.log('   ├─────────────────────────┼────────┼────────┼────────┼─────────┤');
+    for (const user of result.executedBy.slice(0, 10)) {
+      const name = (user.name || 'Unknown').substring(0, 21).padEnd(23);
+      console.log(`   │ ${name} │ ${String(user.executed).padEnd(6)} │ ${String(user.passed).padEnd(6)} │ ${String(user.failed).padEnd(6)} │ ${String(user.passRate + '%').padEnd(7)} │`);
+    }
+    console.log('   └─────────────────────────┴────────┴────────┴────────┴─────────┘');
+    if (result.executedBy.length > 10) console.log(`   ... and ${result.executedBy.length - 10} more`);
+  }
+  
+  // Users list (legacy/other tools)
   if (result.users && result.users.length > 0) {
     console.log('\n👤 USERS:');
     console.log('   ┌─────────────────────────┬────────┬────────┬────────┬────────┐');

@@ -1041,19 +1041,56 @@ export class QualityGates {
     
     const executions = executionData.results || executionData || [];
     
-    // Aggregate by user
-    const userStats = {};
+    // Cache for user names (to avoid multiple API calls)
+    const userCache = {};
+    
+    // Helper to get user name by ID
+    const getUserName = async (userId) => {
+      if (!userId || userId < 0) return null;
+      if (userCache[userId]) return userCache[userId];
+      try {
+        const user = await this.GET(`/user/${userId}`);
+        userCache[userId] = user.fullName || `${user.firstName} ${user.lastName}`.trim() || user.username;
+        return userCache[userId];
+      } catch (e) {
+        return null;
+      }
+    };
+    
+    // Aggregate by assigned user and executor
+    const assignedStats = {};
+    const executorStats = {};
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     
+    // Collect unique executor IDs first
+    const executorIds = new Set();
     for (const exec of executions) {
-      const testerName = exec.testerIdName?.trim() || exec.lastTestResult?.testerName || exec.testerName || "Unassigned";
-      const testerId = exec.testerId || exec.lastTestResult?.testerId;
-      const executedOn = exec.lastTestResult?.executedOn || exec.executedOn;
+      if (exec.executedBy && exec.executedBy > 0) executorIds.add(exec.executedBy);
+      if (exec.lastTestResult?.testerId && exec.lastTestResult.testerId > 0) {
+        executorIds.add(exec.lastTestResult.testerId);
+      }
+    }
+    
+    // Fetch all executor names in parallel
+    await Promise.all([...executorIds].map(id => getUserName(id)));
+    
+    for (const exec of executions) {
+      // Assigned user
+      const assignedName = exec.testerIdName?.trim() || "Unassigned";
+      const assignedId = exec.testerId;
       
-      if (!userStats[testerName]) {
-        userStats[testerName] = {
-          userId: testerId,
-          name: testerName,
+      // Executor (who actually ran the test)
+      const executorId = exec.lastTestResult?.testerId || exec.executedBy;
+      const executorName = userCache[executorId] || "Unknown";
+      
+      const executedOn = exec.lastTestResult?.executedOn || exec.executedOn;
+      const status = exec.lastTestResult?.executionStatus || exec.status || 0;
+      
+      // Track assigned stats
+      if (!assignedStats[assignedName]) {
+        assignedStats[assignedName] = {
+          userId: assignedId,
+          name: assignedName,
           assigned: 0,
           executed: 0,
           passed: 0,
@@ -1062,44 +1099,69 @@ export class QualityGates {
           lastActivity: null,
         };
       }
+      assignedStats[assignedName].assigned++;
       
-      userStats[testerName].assigned++;
-      
-      const status = exec.lastTestResult?.executionStatus || exec.status || 0;
       if (Number(status) > 0) {
-        userStats[testerName].executed++;
-        
+        assignedStats[assignedName].executed++;
         switch (Number(status)) {
-          case 1: userStats[testerName].passed++; break;
-          case 2: userStats[testerName].failed++; break;
-          case 4: userStats[testerName].blocked++; break;
+          case 1: assignedStats[assignedName].passed++; break;
+          case 2: assignedStats[assignedName].failed++; break;
+          case 4: assignedStats[assignedName].blocked++; break;
+        }
+      }
+      
+      // Track executor stats (who actually ran tests)
+      if (Number(status) > 0 && executorId && executorId > 0) {
+        if (!executorStats[executorName]) {
+          executorStats[executorName] = {
+            userId: executorId,
+            name: executorName,
+            executed: 0,
+            passed: 0,
+            failed: 0,
+            blocked: 0,
+            lastActivity: null,
+          };
+        }
+        
+        executorStats[executorName].executed++;
+        switch (Number(status)) {
+          case 1: executorStats[executorName].passed++; break;
+          case 2: executorStats[executorName].failed++; break;
+          case 4: executorStats[executorName].blocked++; break;
         }
         
         if (executedOn) {
           const execDate = new Date(executedOn);
-          if (!userStats[testerName].lastActivity || execDate > new Date(userStats[testerName].lastActivity)) {
-            userStats[testerName].lastActivity = executedOn;
+          if (!executorStats[executorName].lastActivity || execDate > new Date(executorStats[executorName].lastActivity)) {
+            executorStats[executorName].lastActivity = executedOn;
           }
         }
       }
     }
     
-    // Convert to array and calculate metrics
-    const users = Object.values(userStats)
+    // Convert to arrays and calculate metrics
+    const assignedUsers = Object.values(assignedStats)
       .map(user => ({
         ...user,
         completionRate: user.assigned > 0 ? Math.round((user.executed / user.assigned) * 100) : 0,
         passRate: user.executed > 0 ? Math.round((user.passed / user.executed) * 100) : 0,
       }))
+      .sort((a, b) => b.assigned - a.assigned);
+    
+    const executors = Object.values(executorStats)
+      .map(user => ({
+        ...user,
+        passRate: user.executed > 0 ? Math.round((user.passed / user.executed) * 100) : 0,
+      }))
       .sort((a, b) => b.executed - a.executed);
     
     // Team summary
-    const teamSummary = users.reduce((acc, user) => ({
-      totalAssigned: acc.totalAssigned + user.assigned,
+    const teamSummary = executors.reduce((acc, user) => ({
       totalExecuted: acc.totalExecuted + user.executed,
       totalPassed: acc.totalPassed + user.passed,
       totalFailed: acc.totalFailed + user.failed,
-    }), { totalAssigned: 0, totalExecuted: 0, totalPassed: 0, totalFailed: 0 });
+    }), { totalExecuted: 0, totalPassed: 0, totalFailed: 0 });
     
     return {
       tool: "User Activity",
@@ -1108,18 +1170,17 @@ export class QualityGates {
       timestamp: new Date().toISOString(),
       period: { days },
       teamSummary: {
+        totalAssigned: executions.length,
         ...teamSummary,
-        activeUsers: users.filter(u => u.executed > 0).length,
-        totalUsers: users.length,
-        teamCompletionRate: teamSummary.totalAssigned > 0 
-          ? Math.round((teamSummary.totalExecuted / teamSummary.totalAssigned) * 100) 
-          : 0,
+        activeExecutors: executors.length,
+        totalAssignees: assignedUsers.length,
         teamPassRate: teamSummary.totalExecuted > 0 
           ? Math.round((teamSummary.totalPassed / teamSummary.totalExecuted) * 100) 
           : 0,
       },
-      users,
-      topPerformers: users.filter(u => u.executed > 0).slice(0, 5),
+      assignedTo: assignedUsers,
+      executedBy: executors,
+      topExecutors: executors.slice(0, 5),
     };
   }
 }
