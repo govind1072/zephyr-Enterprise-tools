@@ -5,16 +5,22 @@
   "main": "zephyr-enterprise-tools.js",
   "exports": {
     ".": "./zephyr-enterprise-tools.js",
-    "./cli": "./cli.js"
+    "./cli": "./cli.js",
+    "./mcp": "./mcp-server.js"
   },
   "bin": {
     "zephyr-gates": "cli.js",
-    "zephyr-tools": "cli.js"
+    "zephyr-tools": "cli.js",
+    "zephyr-mcp": "mcp-server.js"
   },
   "type": "module",
   "scripts": {
     "start": "node cli.js",
+    "mcp": "node mcp-server.js",
     "test": "node cli.js --help"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "keywords": [
     "zephyr",
@@ -47,6 +53,7 @@
   "files": [
     "zephyr-enterprise-tools.js",
     "cli.js",
+    "mcp-server.js",
     "README.md",
     "LICENSE"
   ]

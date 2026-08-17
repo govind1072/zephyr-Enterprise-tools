@@ -53,7 +53,25 @@ export ZEPHYR_TOKEN="your-api-token"
 
 ## 🤖 MCP Integration
 
-Use zephyr-enterprise-tools as an MCP (Model Context Protocol) server with your AI assistant.
+Use zephyr-enterprise-tools as an MCP (Model Context Protocol) server with your AI assistant. The server only requires `ZEPHYR_BASE_URL` and `ZEPHYR_TOKEN` at startup - **Project ID and Release ID are passed as parameters when calling each tool**.
+
+### Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_projects` | List all Zephyr projects (no parameters needed) |
+| `list_releases` | List releases for a project (requires projectId) |
+| `release_readiness` | Run all 4 quality gates |
+| `requirement_coverage` | Check requirement coverage |
+| `test_plan_analysis` | Analyze test planning status |
+| `test_execution` | Check test execution progress |
+| `defect_quality` | Analyze defect status |
+| `project_health` | Get project health score |
+| `test_coverage` | Get test coverage details |
+| `failed_tests` | List failed tests |
+| `test_trends` | Get execution trends over time |
+| `search_test_cases` | Search test cases by query |
+| `user_activity` | Get user activity metrics |
 
 ### VS Code with GitHub Copilot
 
@@ -65,10 +83,7 @@ Create or edit `.vscode/mcp.json` in your workspace:
     "zephyr-enterprise": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "zephyr-enterprise-tools@latest"
-      ],
+      "args": ["-y", "zephyr-enterprise-tools@latest", "mcp"],
       "env": {
         "ZEPHYR_BASE_URL": "${input:zephyr_base_url}",
         "ZEPHYR_TOKEN": "${input:zephyr_token}"
@@ -101,10 +116,7 @@ Add to your `mcp.json` configuration:
   "mcpServers": {
     "zephyr-enterprise": {
       "command": "npx",
-      "args": [
-        "-y",
-        "zephyr-enterprise-tools@latest"
-      ],
+      "args": ["-y", "zephyr-enterprise-tools@latest", "mcp"],
       "env": {
         "ZEPHYR_BASE_URL": "https://your-zephyr.com/flex/services/rest/latest",
         "ZEPHYR_TOKEN": "your-api-token"
@@ -123,10 +135,7 @@ Edit your `claude_desktop_config.json` file:
   "mcpServers": {
     "zephyr-enterprise": {
       "command": "npx",
-      "args": [
-        "-y",
-        "zephyr-enterprise-tools@latest"
-      ],
+      "args": ["-y", "zephyr-enterprise-tools@latest", "mcp"],
       "env": {
         "ZEPHYR_BASE_URL": "https://your-zephyr.com/flex/services/rest/latest",
         "ZEPHYR_TOKEN": "your-api-token"

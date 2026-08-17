@@ -12,9 +12,19 @@
  *   zephyr-tools --project 364 --release 4312
  *   zephyr-tools -p 364 -r 4312 -t project-health
  *   zephyr-tools -p 364 -r 4312 -t search-tests -q "login"
+ *   zephyr-tools mcp   # Start MCP server
  */
 
-import QualityGates from './zephyr-enterprise-tools.js';
+// Check if MCP server mode
+if (process.argv[2] === 'mcp') {
+  import('./mcp-server.js');
+} else {
+  // Normal CLI mode
+  runCLI();
+}
+
+async function runCLI() {
+  const { default: QualityGates } = await import('./zephyr-enterprise-tools.js');
 
 // ─── Parse Arguments ──────────────────────────────────────────────────────────
 
@@ -537,3 +547,4 @@ async function main() {
 }
 
 main();
+} // end runCLI
