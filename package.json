@@ -1,6 +1,6 @@
 {
   "name": "zephyr-enterprise-tools",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Comprehensive Zephyr Enterprise Tools - Release Readiness, Project Health, Test Analytics & More",
   "main": "zephyr-enterprise-tools.js",
   "exports": {
