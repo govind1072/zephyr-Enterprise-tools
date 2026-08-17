@@ -46,11 +46,7 @@ Set environment variables:
 
 ```bash
 export ZEPHYR_BASE_URL="https://your-zephyr.com/flex/services/rest/latest"
-export ZEPHYR_USERNAME="your-username"
-export ZEPHYR_PASSWORD="your-password"
-
-# Or use a bearer token instead:
-export ZEPHYR_TOKEN="your-token"
+export ZEPHYR_TOKEN="your-api-token"
 ```
 
 ---
@@ -75,8 +71,6 @@ Create or edit `.vscode/mcp.json` in your workspace:
       ],
       "env": {
         "ZEPHYR_BASE_URL": "${input:zephyr_base_url}",
-        "ZEPHYR_USERNAME": "${input:zephyr_username}",
-        "ZEPHYR_PASSWORD": "${input:zephyr_password}",
         "ZEPHYR_TOKEN": "${input:zephyr_token}"
       }
     }
@@ -89,21 +83,9 @@ Create or edit `.vscode/mcp.json` in your workspace:
       "password": false
     },
     {
-      "id": "zephyr_username",
-      "type": "promptString",
-      "description": "Zephyr Enterprise Username (for Basic Auth)",
-      "password": false
-    },
-    {
-      "id": "zephyr_password",
-      "type": "promptString",
-      "description": "Zephyr Enterprise Password (for Basic Auth)",
-      "password": true
-    },
-    {
       "id": "zephyr_token",
       "type": "promptString",
-      "description": "Zephyr Enterprise Bearer Token (alternative to username/password)",
+      "description": "Zephyr Enterprise API Token",
       "password": true
     }
   ]
@@ -125,9 +107,7 @@ Add to your `mcp.json` configuration:
       ],
       "env": {
         "ZEPHYR_BASE_URL": "https://your-zephyr.com/flex/services/rest/latest",
-        "ZEPHYR_USERNAME": "your-username",
-        "ZEPHYR_PASSWORD": "your-password",
-        "ZEPHYR_TOKEN": "your-token"
+        "ZEPHYR_TOKEN": "your-api-token"
       }
     }
   }
@@ -149,16 +129,12 @@ Edit your `claude_desktop_config.json` file:
       ],
       "env": {
         "ZEPHYR_BASE_URL": "https://your-zephyr.com/flex/services/rest/latest",
-        "ZEPHYR_USERNAME": "your-username",
-        "ZEPHYR_PASSWORD": "your-password",
-        "ZEPHYR_TOKEN": "your-token"
+        "ZEPHYR_TOKEN": "your-api-token"
       }
     }
   }
 }
 ```
-
-> **Note:** Use either `ZEPHYR_USERNAME` + `ZEPHYR_PASSWORD` for Basic Auth, or `ZEPHYR_TOKEN` for Bearer token authentication.
 
 ---
 
@@ -215,8 +191,7 @@ import QualityGates from 'zephyr-quality-gates';
 
 const tools = new QualityGates({
   baseUrl: 'https://your-zephyr.com/flex/services/rest/latest',
-  username: 'user',
-  password: 'pass',
+  token: 'your-api-token',
 });
 
 // ── Release Readiness ──────────────────────────────────────
