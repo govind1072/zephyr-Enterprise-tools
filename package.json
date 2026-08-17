@@ -1,0 +1,53 @@
+{
+  "name": "zephyr-enterprise-tools",
+  "version": "1.0.0",
+  "description": "Comprehensive Zephyr Enterprise Tools - Release Readiness, Project Health, Test Analytics & More",
+  "main": "zephyr-enterprise-tools.js",
+  "exports": {
+    ".": "./zephyr-enterprise-tools.js",
+    "./cli": "./cli.js"
+  },
+  "bin": {
+    "zephyr-gates": "./cli.js",
+    "zephyr-tools": "./cli.js"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node cli.js",
+    "test": "node cli.js --help"
+  },
+  "keywords": [
+    "zephyr",
+    "zephyr-enterprise",
+    "quality-gates",
+    "release-readiness",
+    "testing",
+    "qa",
+    "test-management",
+    "test-analytics",
+    "project-health",
+    "test-coverage",
+    "ci-cd",
+    "devops",
+    "mcp"
+  ],
+  "author": "Govind Drolia",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_USERNAME/zephyr-enterprise-tools.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/zephyr-enterprise-tools/issues"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/zephyr-enterprise-tools#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "zephyr-enterprise-tools.js",
+    "cli.js",
+    "README.md",
+    "LICENSE"
+  ]
+}
