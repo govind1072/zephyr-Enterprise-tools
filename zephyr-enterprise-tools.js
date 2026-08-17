@@ -919,42 +919,66 @@ export class QualityGates {
   async getTestCaseTrends(projectId, releaseId, options = {}) {
     const { days = 30 } = options;
     
-    // Get executions
-    const executionData = await this.GET("/execution", {
-      releaseid: releaseId,
-      offset: 0,
-      pagesize: 10000,
-      includeanyoneuser: true,
+    // Calculate start date for ZQL query
+    const now = new Date();
+    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    const startDateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    // Use v3 ZQL advanced search API to get executions within date range
+    const v3BaseUrl = this.baseUrl.replace('/latest', '/v3');
+    const url = new URL(`${v3BaseUrl}/advancesearch/zql`);
+    
+    const requestBody = {
+      firstresult: 0,
+      maxresults: 10000,
+      entitytype: "execution",
+      order: "testcaseId",
+      isascorder: true,
+      is_cfield: false,
+      releaseid: String(releaseId),
+      projectid: "",
+      word: `executedOn > "${startDateStr}"`,
+      zql: true,
+      isOld: false
+    };
+    
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...this.authHeader() },
+      body: JSON.stringify(requestBody),
     });
     
-    const executions = executionData.results || executionData || [];
+    if (!res.ok) {
+      throw new Error(`ZQL API ${res.status}: ${await res.text()}`);
+    }
+    
+    const responseData = await res.json();
+    const executions = responseData[0]?.results || [];
+    const totalCount = responseData[0]?.resultSize || executions.length;
     
     // Group executions by date
     const trendsByDate = {};
-    const now = new Date();
-    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     
     for (const exec of executions) {
-      const executedOn = exec.lastTestResult?.executedOn || exec.executedOn;
+      // Use lastModifiedOn or createDatetime as execution date
+      const executedOn = exec.lastModifiedOn || exec.createDatetime;
       if (!executedOn) continue;
       
       const execDate = new Date(executedOn);
-      if (execDate < startDate) continue;
-      
       const dateKey = execDate.toISOString().split('T')[0];
       
       if (!trendsByDate[dateKey]) {
         trendsByDate[dateKey] = { passed: 0, failed: 0, blocked: 0, wip: 0, total: 0 };
       }
       
-      const status = exec.lastTestResult?.executionStatus || exec.status || 0;
+      const status = exec.status || '0';
       trendsByDate[dateKey].total++;
       
-      switch (Number(status)) {
-        case 1: trendsByDate[dateKey].passed++; break;
-        case 2: trendsByDate[dateKey].failed++; break;
-        case 3: trendsByDate[dateKey].wip++; break;
-        case 4: trendsByDate[dateKey].blocked++; break;
+      switch (String(status)) {
+        case '1': trendsByDate[dateKey].passed++; break;
+        case '2': trendsByDate[dateKey].failed++; break;
+        case '3': trendsByDate[dateKey].wip++; break;
+        case '4': trendsByDate[dateKey].blocked++; break;
       }
     }
     
@@ -979,11 +1003,12 @@ export class QualityGates {
       timestamp: new Date().toISOString(),
       period: {
         days,
-        from: startDate.toISOString().split('T')[0],
+        from: startDateStr,
         to: now.toISOString().split('T')[0],
       },
       summary: {
         totalExecutionsInPeriod: totals.total,
+        totalFromAPI: totalCount,
         passed: totals.passed,
         failed: totals.failed,
         blocked: totals.blocked,
