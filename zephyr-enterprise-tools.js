@@ -59,20 +59,20 @@ export const LOW_RISK_PRIORITIES = ['low', 'trivial', 'p4', 'p5', '4', '5', 'low
 export class QualityGates {
   constructor(config) {
     this.baseUrl = (config.baseUrl || process.env.ZEPHYR_BASE_URL || "").replace(/\/$/, "");
-    this.username = config.username || process.env.ZEPHYR_USERNAME || "";
-    this.password = config.password || process.env.ZEPHYR_PASSWORD || "";
     this.token = config.token || process.env.ZEPHYR_TOKEN || "";
     
     if (!this.baseUrl) {
       throw new Error("ZEPHYR_BASE_URL is required");
+    }
+    if (!this.token) {
+      throw new Error("ZEPHYR_TOKEN is required");
     }
   }
 
   // ─── HTTP Helper ────────────────────────────────────────────────────────────
 
   authHeader() {
-    if (this.token) return { Authorization: `Bearer ${this.token}` };
-    return { Authorization: `Basic ${Buffer.from(`${this.username}:${this.password}`).toString("base64")}` };
+    return { Authorization: `Bearer ${this.token}` };
   }
 
   async request(method, path, params = {}) {

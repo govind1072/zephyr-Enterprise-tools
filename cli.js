@@ -7,8 +7,7 @@
  * 
  * Usage:
  *   export ZEPHYR_BASE_URL="https://your-zephyr.com/flex/services/rest/latest"
- *   export ZEPHYR_USERNAME="your-username"
- *   export ZEPHYR_PASSWORD="your-password"
+ *   export ZEPHYR_TOKEN="your-api-token"
  *   
  *   zephyr-tools --project 364 --release 4312
  *   zephyr-tools -p 364 -r 4312 -t project-health
@@ -133,9 +132,7 @@ AVAILABLE TOOLS:
 
 ENVIRONMENT VARIABLES:
   ZEPHYR_BASE_URL       Zephyr API base URL (required)
-  ZEPHYR_USERNAME       Username for Basic auth
-  ZEPHYR_PASSWORD       Password for Basic auth
-  ZEPHYR_TOKEN          Bearer token (alternative to username/password)
+  ZEPHYR_TOKEN          API token for authentication (required)
 
 EXAMPLES:
   # Run all quality gates (release readiness)
@@ -459,8 +456,6 @@ async function main() {
   try {
     const tools = new QualityGates({
       baseUrl: process.env.ZEPHYR_BASE_URL,
-      username: process.env.ZEPHYR_USERNAME,
-      password: process.env.ZEPHYR_PASSWORD,
       token: process.env.ZEPHYR_TOKEN,
     });
     
