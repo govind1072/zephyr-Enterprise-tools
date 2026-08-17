@@ -35,12 +35,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR_USERNAME/zephyr-enterprise-tools.git"
+    "url": "git+https://github.com/govind1072/zephyr-Enterprise-tools.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_USERNAME/zephyr-enterprise-tools/issues"
+    "url": "https://github.com/govind1072/zephyr-Enterprise-tools/issues"
   },
-  "homepage": "https://github.com/YOUR_USERNAME/zephyr-enterprise-tools#readme",
+  "homepage": "https://github.com/govind1072/zephyr-Enterprise-tools#readme",
   "engines": {
     "node": ">=18.0.0"
   },
