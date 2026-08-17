@@ -32,10 +32,10 @@ Comprehensive tools for Zephyr Enterprise - Release Readiness, Project Health, T
 
 ```bash
 # Install from npm
-npm install -g zephyr-quality-gates
+npm install -g zephyr-Enterprise-tools
 
 # Or install locally
-npm install zephyr-quality-gates
+npm install zephyr-Enterprise-tools
 ```
 
 ---
