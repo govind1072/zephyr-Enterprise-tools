@@ -936,7 +936,7 @@ export class QualityGates {
       isascorder: true,
       is_cfield: false,
       releaseid: String(releaseId),
-      projectid: "",
+      projectid: String(projectId),
       word: `executedOn > "${startDateStr}"`,
       zql: true,
       isOld: false
