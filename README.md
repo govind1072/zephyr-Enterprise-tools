@@ -73,50 +73,21 @@ Use zephyr-enterprise-tools as an MCP (Model Context Protocol) server with your 
 | `search_test_cases` | Search test cases by query |
 | `user_activity` | Get user activity metrics |
 
-### VS Code with GitHub Copilot
+### Claude Desktop
 
-Create or edit `.vscode/mcp.json` in your workspace:
-
-```json
-{
-  "servers": {
-    "zephyr-enterprise": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "zephyr-enterprise-tools@latest", "mcp"],
-      "env": {
-        "ZEPHYR_BASE_URL": "${input:zephyr_base_url}",
-        "ZEPHYR_TOKEN": "${input:zephyr_token}"
-      }
-    }
-  },
-  "inputs": [
-    {
-      "id": "zephyr_base_url",
-      "type": "promptString",
-      "description": "Zephyr Enterprise API Base URL (e.g. https://your-zephyr.com/flex/services/rest/latest)",
-      "password": false
-    },
-    {
-      "id": "zephyr_token",
-      "type": "promptString",
-      "description": "Zephyr Enterprise API Token",
-      "password": true
-    }
-  ]
-}
-```
-
-### Cursor
-
-Add to your `mcp.json` configuration:
+Edit your `claude_desktop_config.json` file:
 
 ```json
 {
   "mcpServers": {
-    "zephyr-enterprise": {
+    "zephyr": {
       "command": "npx",
-      "args": ["-y", "zephyr-enterprise-tools@latest", "mcp"],
+      "args": [
+        "-y",
+        "--package",
+        "zephyr-enterprise-tools@latest",
+        "zephyr-mcp"
+      ],
       "env": {
         "ZEPHYR_BASE_URL": "https://your-zephyr.com/flex/services/rest/latest",
         "ZEPHYR_TOKEN": "your-api-token"
@@ -126,9 +97,34 @@ Add to your `mcp.json` configuration:
 }
 ```
 
-### Claude Desktop
+### VS Code with GitHub Copilot
 
-Edit your `claude_desktop_config.json` file:
+Create or edit `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "zephyr": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package",
+        "zephyr-enterprise-tools",
+        "zephyr-mcp"
+      ],
+      "env": {
+        "ZEPHYR_BASE_URL": "https://your-zephyr.com/flex/services/rest/latest",
+        "ZEPHYR_TOKEN": "your-api-token"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to your `mcp.json` configuration:
 
 ```json
 {
