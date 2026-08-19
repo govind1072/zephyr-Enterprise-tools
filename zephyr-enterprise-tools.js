@@ -1285,6 +1285,99 @@ export class QualityGates {
       topExecutors: executors.slice(0, 5),
     };
   }
+
+  // ─── User Trend (Audit Logs) ─────────────────────────────────────────────────
+
+  async getUserTrend(options = {}) {
+    const {
+      userName = "",
+      fromDate = null,   // "YYYY-MM-DD"
+      toDate = null,     // "YYYY-MM-DD"
+      entity = "",       // "project", "release", or "" for all
+      operation = null,  // specific operation or null for all
+      offset = 0,
+      pageSize = 25,
+    } = options;
+
+    const v3BaseUrl = this.baseUrl.replace('/latest', '/v3');
+    const url = new URL(`${v3BaseUrl}/ui/auditLogs`);
+    url.searchParams.set("offset", String(offset));
+    url.searchParams.set("pagesize", String(pageSize));
+    url.searchParams.set("isascorder", "false");
+    url.searchParams.set("order", "id");
+    url.searchParams.set("isExport", "false");
+
+    const body = { entity, operation, userName };
+
+    if (fromDate) {
+      body.fromDate = fromDate;
+      body.fromDateVal = `${fromDate}T00:00:00.000Z`;
+    }
+    if (toDate) {
+      body.toDate = toDate;
+      body.toDateVal = `${toDate}T00:00:00.000Z`;
+    }
+
+    const res = await fetch(url.toString(), {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...this.authHeader(),
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Zephyr audit logs API ${res.status}: ${text}`);
+    }
+
+    const data = await res.json();
+    const logs = data.results || data || [];
+
+    // Summarise by operation and entity type
+    const byOperation = {};
+    const byEntity = {};
+    for (const log of logs) {
+      const op  = log.operation || "Unknown";
+      const ent = log.entity    || "Unknown";
+      byOperation[op]  = (byOperation[op]  || 0) + 1;
+      byEntity[ent]    = (byEntity[ent]    || 0) + 1;
+    }
+
+    return {
+      tool: "User Trend",
+      userName,
+      dateRange: { from: fromDate || "all", to: toDate || "all" },
+      entity: entity || "all",
+      timestamp: new Date().toISOString(),
+      totalRecords: data.totalCount ?? logs.length,
+      offset,
+      pageSize,
+      operationSummary: Object.entries(byOperation)
+        .map(([operation, count]) => ({ operation, count }))
+        .sort((a, b) => b.count - a.count),
+      entitySummary: Object.entries(byEntity)
+        .map(([entity, count]) => ({ entity, count }))
+        .sort((a, b) => b.count - a.count),
+      auditLogs: logs.map(log => ({
+        id:          log.id,
+        userName:    log.userName,
+        entity:      log.entity,
+        entityName:  log.entityName,
+        operation:   log.operation,
+        description: log.description,
+        detail:      log.detail,
+        projectId:   log.projectId,
+        projectName: log.projectName,
+        releaseId:   log.releaseId,
+        releaseName: log.releaseName,
+        createdOn:   log.createdOn,
+        ipAddress:   log.ipAddress,
+      })),
+    };
+  }
 }
 
 // Export with both names for backward compatibility

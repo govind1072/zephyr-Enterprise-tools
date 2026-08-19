@@ -168,6 +168,23 @@ const TOOLS = [
     },
   },
   {
+    name: 'user_trend',
+    description: 'Get full audit log activity for a user — every action they performed across the system. Filter by date range and optionally by entity type (project or release).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userName:  { type: 'string', description: 'Username to look up (e.g. "dylan.garcia")' },
+        fromDate:  { type: 'string', description: 'Start date YYYY-MM-DD (e.g. "2026-08-01")' },
+        toDate:    { type: 'string', description: 'End date YYYY-MM-DD (e.g. "2026-08-18")' },
+        entity:    { type: 'string', description: 'Filter by entity type: "project", "release", or "" for all', enum: ['project', 'release', ''] },
+        operation: { type: 'string', description: 'Filter by operation (e.g. "CREATE", "UPDATE"). Omit for all.' },
+        offset:    { type: 'number', description: 'Pagination offset (default 0)' },
+        pageSize:  { type: 'number', description: 'Records per page (default 25)' },
+      },
+      required: ['userName'],
+    },
+  },
+  {
     name: 'list_projects',
     description: 'List all available Zephyr projects.',
     inputSchema: {
@@ -281,6 +298,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         
       case 'user_activity':
         result = await tools.getUserActivity(projectId, releaseId, { days: args.days || 30 });
+        break;
+
+      case 'user_trend':
+        result = await tools.getUserTrend({
+          userName:  args.userName,
+          fromDate:  args.fromDate  || null,
+          toDate:    args.toDate    || null,
+          entity:    args.entity    || '',
+          operation: args.operation || null,
+          offset:    args.offset    || 0,
+          pageSize:  args.pageSize  || 25,
+        });
         break;
         
       case 'list_projects':
