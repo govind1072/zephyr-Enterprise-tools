@@ -1293,9 +1293,10 @@ export class QualityGates {
 
     // Fetch all executions for the release
     const executionData = await this.GET('/execution', {
-      projectId,
-      releaseId,
-      maxResults: 10000,
+      releaseid: releaseId,
+      offset: 0,
+      pagesize: 10000,
+      includeanyoneuser: true,
     });
     const executions = executionData.results || executionData || [];
     const total = executions.length;
