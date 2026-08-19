@@ -25,6 +25,7 @@ Comprehensive tools for Zephyr Enterprise - Release Readiness, Project Health, T
 | `test-trends` | Test execution trends over time |
 | `search-tests` | Search test cases by query |
 | `user-activity` | User activity and productivity metrics |
+| `user-trend` | Full audit log history for a user — every action across the system |
 | `execution-burndown` | Day-by-day execution burndown (remaining vs ideal) |
 
 ---
@@ -73,6 +74,7 @@ Use zephyr-enterprise-tools as an MCP (Model Context Protocol) server with your 
 | `test_trends` | Get execution trends over time |
 | `search_test_cases` | Search test cases by query |
 | `user_activity` | Get user activity metrics |
+| `user_trend` | Full audit log history for a user — filter by date range, entity type, and operation |
 | `execution_burndown` | Day-by-day execution burndown chart data (remaining vs ideal) |
 
 ### Claude Desktop
