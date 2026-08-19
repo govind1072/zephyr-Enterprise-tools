@@ -168,6 +168,20 @@ const TOOLS = [
     },
   },
   {
+    name: 'execution_burndown',
+    description: 'Generate a day-by-day execution burndown chart for a release. Returns daily remaining vs ideal counts so an AI or chart tool can visualise test execution progress over time.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'number', description: 'Zephyr project ID' },
+        releaseId: { type: 'number', description: 'Zephyr release ID' },
+        startDate: { type: 'string', description: 'Burndown start date YYYY-MM-DD (default: earliest execution date)' },
+        endDate:   { type: 'string', description: 'Burndown end date YYYY-MM-DD (default: today)' },
+      },
+      required: ['projectId', 'releaseId'],
+    },
+  },
+  {
     name: 'user_trend',
     description: 'Get full audit log activity for a user — every action they performed across the system. Filter by date range and optionally by entity type (project or release).',
     inputSchema: {
@@ -298,6 +312,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         
       case 'user_activity':
         result = await tools.getUserActivity(projectId, releaseId, { days: args.days || 30 });
+        break;
+
+      case 'execution_burndown':
+        result = await tools.getExecutionBurndown(projectId, releaseId, {
+          startDate: args.startDate || null,
+          endDate:   args.endDate   || null,
+        });
         break;
 
       case 'user_trend':
