@@ -38,6 +38,11 @@ export interface TestPlanResult extends GateResult {
   assignedTests: number;
 }
 
+export interface TestPlanOptions {
+  /** Optional Zephyr ZQL expression, e.g. `priority = "P1"`. */
+  query?: string;
+}
+
 export interface TestExecutionResult extends GateResult {
   executionPercentage: number;
   completedTests: number;
@@ -133,6 +138,7 @@ export interface TestTrendsResult {
 }
 
 export interface SearchTestCasesOptions {
+  /** Zephyr ZQL expression, e.g. `priority = "P1"`. */
   query?: string;
   limit?: number;
 }
@@ -176,7 +182,7 @@ export declare class QualityGates {
 
   // Quality Gates (Release Readiness)
   requirementCoverageGate(projectId: number, releaseId: number): Promise<RequirementCoverageResult>;
-  testPlanAnalysisGate(projectId: number, releaseId: number): Promise<TestPlanResult>;
+  testPlanAnalysisGate(projectId: number, releaseId: number, options?: TestPlanOptions): Promise<TestPlanResult>;
   testExecutionGate(projectId: number, releaseId: number): Promise<TestExecutionResult>;
   defectQualityGate(projectId: number, releaseId: number): Promise<DefectQualityResult>;
   runAllGates(projectId: number, releaseId: number): Promise<ReleaseReadinessResult>;

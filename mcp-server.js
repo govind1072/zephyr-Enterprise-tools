@@ -44,12 +44,13 @@ const TOOLS = [
   },
   {
     name: 'test_plan_analysis',
-    description: 'Analyze test planning status. Threshold: <80% = NO GO, 80-90% = CONDITIONAL, ≥90% = GO.',
+    description: 'Analyze test planning status, optionally scoped to testcase IDs returned by a Zephyr ZQL expression. Threshold: <80% = NO GO, 80-90% = CONDITIONAL, ≥90% = GO.',
     inputSchema: {
       type: 'object',
       properties: {
         projectId: { type: 'number', description: 'Zephyr project ID' },
         releaseId: { type: 'number', description: 'Zephyr release ID' },
+        query: { type: 'string', description: 'Optional Zephyr ZQL expression, e.g. priority = "P1"' },
       },
       required: ['projectId', 'releaseId'],
     },
@@ -142,13 +143,13 @@ const TOOLS = [
   },
   {
     name: 'search_test_cases',
-    description: 'Search test cases by query string.',
+    description: 'Search test cases using a Zephyr ZQL expression, such as priority = "P1".',
     inputSchema: {
       type: 'object',
       properties: {
         projectId: { type: 'number', description: 'Zephyr project ID' },
         releaseId: { type: 'number', description: 'Zephyr release ID' },
-        query: { type: 'string', description: 'Search query string' },
+        query: { type: 'string', description: 'Zephyr ZQL expression, e.g. priority = "P1"' },
         limit: { type: 'number', description: 'Maximum results (default: 50)' },
       },
       required: ['projectId', 'releaseId'],
@@ -272,7 +273,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
         
       case 'test_plan_analysis':
-        result = await tools.testPlanAnalysisGate(projectId, releaseId);
+        result = await tools.testPlanAnalysisGate(projectId, releaseId, { query: args.query });
         break;
         
       case 'test_execution':

@@ -113,6 +113,50 @@ export class QualityGates {
     return res.json();
   }
 
+  async POSTv3(path, body) {
+    const v3BaseUrl = this.baseUrl.replace('/latest', '/v3');
+    const res = await fetch(`${v3BaseUrl}${path}`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json", ...this.authHeader() },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Zephyr v3 API ${res.status}: ${text}`);
+    }
+    return res.json();
+  }
+
+  async searchExecutionsByZql(releaseId, query) {
+    const pageSize = 50;
+    let firstResult = 0;
+    const executions = [];
+
+    while (true) {
+      const response = await this.POSTv3("/advancesearch/zql", {
+        firstresult: firstResult,
+        maxresults: pageSize,
+        entitytype: "execution",
+        order: "testcaseId",
+        isascorder: true,
+        is_cfield: false,
+        releaseid: String(releaseId),
+        projectid: "",
+        word: query,
+        zql: true,
+        isOld: false,
+      });
+      const page = response[0]?.results || response.results || [];
+
+      if (!Array.isArray(page) || page.length === 0) break;
+
+      executions.push(...page);
+      firstResult += page.length;
+    }
+
+    return [...new Map(executions.map(execution => [execution.id, execution])).values()];
+  }
+
   async PUT(path, params, body) {
     const url = new URL(`${this.baseUrl}${path}`);
     for (const [k, v] of Object.entries(params)) {
@@ -163,22 +207,36 @@ export class QualityGates {
 
   // ─── Gate 2: Test Plan Analysis ─────────────────────────────────────────────
 
-  async testPlanAnalysisGate(projectId, releaseId) {
-    const summary = await this.GET(`/summary/release/${releaseId}`, { isHideCycleEnabled: false });
-    
-    const totalTestcases = summary.testcase?.totalTestcaseCount || 0;
-    const mappedRequirements = summary.requirement?.mappedRequirementCount || 0;
-    const totalRequirements = summary.requirement?.totalRequirementCount || 0;
-    
-    // Get all executions for the release
-    const executionData = await this.GET("/execution", {
-      releaseid: releaseId,
-      offset: 0,
-      pagesize: 10000,
-      includeanyoneuser: true,
-    });
-    
-    const executions = executionData.results || executionData || [];
+  async testPlanAnalysisGate(projectId, releaseId, options = {}) {
+    const { query } = options;
+    let totalTestcases;
+    let mappedRequirements;
+    let totalRequirements;
+    let executions;
+
+    if (query) {
+      const [matchingTestcases, matchingExecutions] = await Promise.all([
+        this.searchTestCases(projectId, releaseId, {
+          query,
+          limit: Number.MAX_SAFE_INTEGER,
+        }),
+        this.searchExecutionsByZql(releaseId, query),
+      ]);
+      totalTestcases = matchingTestcases.results.length;
+      executions = matchingExecutions;
+    } else {
+      const summary = await this.GET(`/summary/release/${releaseId}`, { isHideCycleEnabled: false });
+      totalTestcases = summary.testcase?.totalTestcaseCount || 0;
+      mappedRequirements = summary.requirement?.mappedRequirementCount || 0;
+      totalRequirements = summary.requirement?.totalRequirementCount || 0;
+      const executionData = await this.GET("/execution", {
+        releaseid: releaseId,
+        offset: 0,
+        pagesize: 10000,
+        includeanyoneuser: true,
+      });
+      executions = executionData.results || executionData || [];
+    }
     const totalExecutions = Array.isArray(executions) ? executions.length : 0;
     
     // Count assigned executions
@@ -223,6 +281,7 @@ export class QualityGates {
       gate: "Test Plan Analysis",
       projectId,
       releaseId,
+      query: query || undefined,
       analysis: {
         testcasePlanning: {
           totalTestcases,
@@ -234,7 +293,7 @@ export class QualityGates {
           assignedExecutions,
           percentage: executionAssignmentPct,
         },
-        requirementCoverage: {
+        requirementCoverage: query ? undefined : {
           totalRequirements,
           mappedRequirements,
           percentage: totalRequirements > 0 ? Math.round((mappedRequirements / totalRequirements) * 100 * 100) / 100 : 0,
@@ -1031,52 +1090,64 @@ export class QualityGates {
   async searchTestCases(projectId, releaseId, options = {}) {
     const { query = '', status, priority, limit = 50 } = options;
     
-    // Get test cases
-    const params = {
-      projectId: projectId,
-      releaseId: releaseId,
-      offset: 0,
-      maxRecords: 500,
-    };
-    
-    if (query) params.word = query;
-    
     let testcases = [];
-    try {
-      const tcData = await this.GET("/testcase/tree", params);
-      testcases = tcData.results || tcData || [];
-      
-      // Flatten tree structure if needed
-      if (!Array.isArray(testcases)) {
-        testcases = this.flattenTestcaseTree(tcData);
+    if (query) {
+      const pageSize = 5000;
+      let firstResult = 0;
+
+      while (true) {
+        const tcData = await this.POSTv3("/advancesearch/zql", {
+          firstresult: firstResult,
+          maxresults: pageSize,
+          entitytype: "testcase",
+          order: "orderId",
+          isascorder: true,
+          is_cfield: false,
+          releaseid: String(releaseId),
+          projectid: String(projectId),
+          word: query,
+          zql: true,
+          isOld: false,
+        });
+        const page = tcData[0]?.results || tcData.results || [];
+
+        if (!Array.isArray(page) || page.length === 0) break;
+
+        testcases.push(...page);
+        firstResult += page.length;
       }
-    } catch (e) {
-      // Try alternative endpoint
+      testcases = [...new Map(testcases.map(testcase => [testcase.testcase?.id || testcase.id, testcase])).values()];
+    } else {
+      const params = {
+        projectId,
+        releaseId,
+        offset: 0,
+        maxRecords: 500,
+      };
       try {
-        const tcData = await this.GET("/testcase", params);
+        const tcData = await this.GET("/testcase/tree", params);
         testcases = tcData.results || tcData || [];
-      } catch (e2) {
-        return {
-          tool: "Search Test Cases",
-          projectId,
-          releaseId,
-          error: "Unable to fetch test cases",
-          results: [],
-        };
+        if (!Array.isArray(testcases)) {
+          testcases = this.flattenTestcaseTree(tcData);
+        }
+      } catch (e) {
+        try {
+          const tcData = await this.GET("/testcase", params);
+          testcases = tcData.results || tcData || [];
+        } catch (e2) {
+          return {
+            tool: "Search Test Cases",
+            projectId,
+            releaseId,
+            error: "Unable to fetch test cases",
+            results: [],
+          };
+        }
       }
     }
     
     // Filter results
     let filtered = testcases;
-    
-    if (query) {
-      const q = query.toLowerCase();
-      filtered = filtered.filter(tc => 
-        (tc.name || '').toLowerCase().includes(q) ||
-        (tc.testcaseKey || tc.alternateId || '').toLowerCase().includes(q) ||
-        (tc.description || '').toLowerCase().includes(q)
-      );
-    }
     
     if (status) {
       filtered = filtered.filter(tc => 
@@ -1091,17 +1162,20 @@ export class QualityGates {
     }
     
     // Map to clean output
-    const results = filtered.slice(0, limit).map(tc => ({
-      id: tc.id,
-      key: tc.testcaseKey || tc.alternateId,
-      name: tc.name,
-      status: tc.status,
-      priority: tc.priority,
-      automated: tc.automated || tc.isAutomated || false,
+    const results = filtered.slice(0, limit).map(tc => {
+      const testcase = tc.testcase || tc;
+      return {
+      id: testcase.id,
+      key: testcase.testcaseKey || testcase.alternateId || testcase.externalId,
+      name: testcase.name,
+      status: testcase.status,
+      priority: testcase.priority,
+      automated: testcase.automated || testcase.isAutomated || false,
       folder: tc.folderPath || tc.tcrCatalogTreeId?.name,
-      estimatedTime: tc.estimatedTime,
-      tags: tc.tags || [],
-    }));
+      estimatedTime: testcase.estimatedTime,
+      tags: testcase.tags || [],
+      };
+    });
     
     return {
       tool: "Search Test Cases",
