@@ -1,6 +1,8 @@
 # Zephyr Enterprise Tools
 
-Comprehensive tools for Zephyr Enterprise - Release Readiness, Project Health, Test Analytics & More.
+Comprehensive tools for Zephyr Enterprise — Release Readiness, Project Health, Test Analytics & More.
+
+---
 
 ## 🛠️ Available Tools
 
@@ -10,30 +12,30 @@ Comprehensive tools for Zephyr Enterprise - Release Readiness, Project Health, T
 |------|-------------|------------|
 | `release-readiness` | Run all 4 quality gates | Combined assessment |
 | `requirement-coverage` | Are requirements covered by tests? | ≥70% = GO |
-| `test-plan` | Are tests planned and assigned? | <80% = NO GO, 80-90% = CONDITIONAL, ≥90% = GO |
-| `test-execution` | Have tests been executed? | <90% = NO GO, 90-97% = CONDITIONAL, ≥97% = GO |
-| `defect-quality` | Are critical defects resolved? | Blocker >0 = NO GO, High-risk >10 = NO GO |
+| `test-plan` | Are tests planned and assigned? | <80% = NO GO, 80–90% = CONDITIONAL, ≥90% = GO |
+| `test-execution` | Have tests been executed? | <90% = NO GO, 90–97% = CONDITIONAL, ≥97% = GO |
+| `defect-quality` | Are critical defects resolved? | Blocker > 0 = NO GO, High-risk > 10 = NO GO |
 
 ### 📊 Analytics & Insights
 
 | Tool | Description |
 |------|-------------|
-| `project-health` | Overall project health score (0-100) with status |
+| `project-health` | Overall project health score (0–100) with status |
 | `test-coverage` | Detailed test coverage analysis |
 | `failed-tests` | List and analyze failed tests |
 | `req-coverage` | Requirements with/without test coverage |
 | `test-trends` | Test execution trends over time |
-| `search-tests` | Search test cases by query |
+| `search-tests` | Search test cases by keyword query |
 | `user-activity` | User activity and productivity metrics |
-| `user-trend` | Full audit log history for a user — every action across the system |
-| `execution-burndown` | Day-by-day execution burndown (remaining vs ideal) |
+| `user-trend` | Full audit log history for a user — every action across the system, filterable by date range, entity type, and operation |
+| `execution-burndown` | Day-by-day execution burndown (remaining vs ideal), supports optional date range filtering |
 
 ---
 
 ## 📦 Installation
 
 ```bash
-# Install from npm
+# Install globally
 npm install -g zephyr-enterprise-tools
 
 # Or install locally
@@ -55,27 +57,35 @@ export ZEPHYR_TOKEN="your-api-token"
 
 ## 🤖 MCP Integration
 
-Use zephyr-enterprise-tools as an MCP (Model Context Protocol) server with your AI assistant. The server only requires `ZEPHYR_BASE_URL` and `ZEPHYR_TOKEN` at startup - **Project ID and Release ID are passed as parameters when calling each tool**.
+Use `zephyr-enterprise-tools` as an MCP (Model Context Protocol) server with your AI assistant. The server only requires `ZEPHYR_BASE_URL` and `ZEPHYR_TOKEN` at startup — **Project ID and Release ID are passed as parameters when calling each tool**.
 
 ### Available MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `list_projects` | List all Zephyr projects (no parameters needed) |
-| `list_releases` | List releases for a project (requires projectId) |
-| `release_readiness` | Run all 4 quality gates |
-| `requirement_coverage` | Check requirement coverage |
-| `test_plan_analysis` | Analyze test planning status |
-| `test_execution` | Check test execution progress |
-| `defect_quality` | Analyze defect status |
-| `project_health` | Get project health score |
-| `test_coverage` | Get test coverage details |
-| `failed_tests` | List failed tests |
-| `test_trends` | Get execution trends over time |
-| `search_test_cases` | Search test cases by query |
-| `user_activity` | Get user activity metrics |
-| `user_trend` | Full audit log history for a user — filter by date range, entity type, and operation |
-| `execution_burndown` | Day-by-day execution burndown chart data (remaining vs ideal) |
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `list_projects` | _(none)_ | List all Zephyr projects |
+| `list_releases` | `projectId` | List releases for a project |
+| `release_readiness` | `projectId`, `releaseId` | Run all 4 quality gates |
+| `requirement_coverage` | `projectId`, `releaseId` | Check requirement coverage |
+| `test_plan_analysis` | `projectId`, `releaseId`, `query?` _(ZQL)_ | Analyze test planning status — supports ZQL filter e.g. `priority = "P1"` |
+| `test_execution` | `projectId`, `releaseId` | Check test execution progress |
+| `defect_quality` | `projectId`, `releaseId` | Analyze defect status |
+| `project_health` | `projectId`, `releaseId` | Get project health score |
+| `test_coverage` | `projectId`, `releaseId` | Get test coverage details |
+| `failed_tests` | `projectId`, `releaseId`, `limit?` | List failed tests |
+| `test_trends` | `projectId`, `releaseId`, `days?` | Get execution trends over time |
+| `search_test_cases` | `projectId`, `releaseId`, `query?`, `limit?` | Search test cases by keyword |
+| `user_activity` | `projectId`, `releaseId`, `days?` | Get user activity metrics |
+| `user_trend` | `userName`*, `fromDate?`, `toDate?`, `entity?`, `operation?`, `pageSize?`, `offset?` | Full audit log history for a user |
+| `execution_burndown` | `projectId`, `releaseId`, `startDate?`, `endDate?` | Day-by-day burndown chart data |
+
+> **\* `user_trend` — `userName` must be the user's full email address** (e.g. `jane.doe@yourcompany.com`). Short names or display names will return 0 results. `pageSize` supports up to 1000 records per request.
+
+> **`test_plan_analysis` ZQL filter** — Use the `query` parameter to scope results to a specific priority, e.g. `priority = "P1"`. This is the recommended way to filter test plan metrics by priority. Note: `search_test_cases` accepts keyword queries but does not support ZQL priority filtering.
+
+> **`execution_burndown` date range** — Use `startDate` and `endDate` (format: `YYYY-MM-DD`) to scope the burndown to a specific period within the release window.
+
+---
 
 ### Claude Desktop
 
@@ -149,56 +159,69 @@ Add to your `mcp.json` configuration:
 
 ## 🖥️ CLI Usage
 
+The CLI binary is `zephyr-enterprise-tools`:
+
 ```bash
 # Run all quality gates (release readiness)
-zephyr-tools -p <projectId> -r <releaseId>
+zephyr-enterprise-tools -p <projectId> -r <releaseId>
 
-# Run specific tool
-zephyr-tools -p 364 -r 4312 -t project-health
-zephyr-tools -p 364 -r 4312 -t failed-tests
-zephyr-tools -p 364 -r 4312 -t user-activity
+# Run a specific tool
+zephyr-enterprise-tools -p 364 -r 4312 -t project-health
+zephyr-enterprise-tools -p 364 -r 4312 -t failed-tests
+zephyr-enterprise-tools -p 364 -r 4312 -t user-activity
 
-# Search test cases
-zephyr-tools -p 364 -r 4312 -t search-tests -q "login"
+# Search test cases by keyword
+zephyr-enterprise-tools -p 364 -r 4312 -t search-tests -q "login"
+
+# Test plan analysis filtered to P1 priority (ZQL)
+zephyr-enterprise-tools -p 364 -r 4312 -t test-plan -q 'priority = "P1"'
 
 # Get trends for last 14 days
-zephyr-tools -p 364 -r 4312 -t test-trends -d 14
+zephyr-enterprise-tools -p 364 -r 4312 -t test-trends -d 14
+
+# Get user audit log (full email required)
+zephyr-enterprise-tools -t user-trend --user jane.doe@yourcompany.com --page-size 1000
 
 # JSON output (for CI/CD)
-zephyr-tools -p 364 -r 4312 --json
+zephyr-enterprise-tools -p 364 -r 4312 --json
 
 # Help
-zephyr-tools --help
+zephyr-enterprise-tools --help
 ```
 
 ### CLI Options
 
 | Option | Description |
 |--------|-------------|
-| `-p, --project <id>` | Project ID (required) |
-| `-r, --release <id>` | Release ID (required) |
-| `-t, --tool <name>` | Tool to run (default: release-readiness) |
-| `-q, --query <text>` | Search query (for search-tests) |
+| `-p, --project <id>` | Project ID (required for most tools) |
+| `-r, --release <id>` | Release ID (required for most tools) |
+| `-t, --tool <name>` | Tool to run (default: `release-readiness`) |
+| `-q, --query <text>` | Keyword query (for `search-tests`) or ZQL expression (for `test-plan`) |
 | `-d, --days <n>` | Days for trends/activity (default: 30) |
 | `-l, --limit <n>` | Max results (default: 50) |
+| `--user <email>` | Full email address for `user-trend` |
+| `--page-size <n>` | Records per page for `user-trend` (max: 1000) |
+| `--start-date <YYYY-MM-DD>` | Start date for `execution-burndown` |
+| `--end-date <YYYY-MM-DD>` | End date for `execution-burndown` |
 | `--json` | Output as JSON |
 | `-h, --help` | Show help |
 
 ### Exit Codes
-- `0` = GO / Healthy
-- `1` = CONDITIONAL GO / At Risk
-- `2` = NO GO / Critical
+
+| Code | Meaning |
+|------|---------|
+| `0` | GO / Healthy |
+| `1` | CONDITIONAL GO / At Risk |
+| `2` | NO GO / Critical |
 
 ---
 
 ## 📚 Programmatic Usage
 
 ```javascript
-import QualityGates from 'zephyr-quality-gates';
-// Or with the new filename:
-// import ZephyrTools from './zephyr-enterprise-tools.js';
+import ZephyrEnterpriseTools from 'zephyr-enterprise-tools';
 
-const tools = new QualityGates({
+const tools = new ZephyrEnterpriseTools({
   baseUrl: 'https://your-zephyr.com/flex/services/rest/latest',
   token: 'your-api-token',
 });
@@ -208,21 +231,36 @@ const report = await tools.runAllGates(364, 4312);
 console.log(report.overallStatus); // "GO" | "CONDITIONAL GO" | "NO GO"
 
 // Individual gates
-const coverage = await tools.requirementCoverageGate(364, 4312);
-const planning = await tools.testPlanAnalysisGate(364, 4312);
+const coverage  = await tools.requirementCoverageGate(364, 4312);
+const planning  = await tools.testPlanAnalysisGate(364, 4312);
+const planningP1 = await tools.testPlanAnalysisGate(364, 4312, { query: 'priority = "P1"' });
 const execution = await tools.testExecutionGate(364, 4312);
-const defects = await tools.defectQualityGate(364, 4312);
+const defects   = await tools.defectQualityGate(364, 4312);
 
 // ── Analytics & Insights ───────────────────────────────────
-const health = await tools.getProjectHealth(364, 4312);
-console.log(health.healthScore); // 0-100
+const health      = await tools.getProjectHealth(364, 4312);
+console.log(health.healthScore); // 0–100
 
-const coverage = await tools.getTestCoverage(364, 4312);
-const failed = await tools.getFailedTests(364, 4312, { limit: 20 });
+const coverage    = await tools.getTestCoverage(364, 4312);
+const failed      = await tools.getFailedTests(364, 4312, { limit: 20 });
 const reqCoverage = await tools.getRequirementCoverage(364, 4312);
-const trends = await tools.getTestCaseTrends(364, 4312, { days: 14 });
-const results = await tools.searchTestCases(364, 4312, { query: 'login' });
-const activity = await tools.getUserActivity(364, 4312, { days: 30 });
+const trends      = await tools.getTestCaseTrends(364, 4312, { days: 14 });
+const results     = await tools.searchTestCases(364, 4312, { query: 'login' });
+const activity    = await tools.getUserActivity(364, 4312, { days: 30 });
+
+// User audit log — full email address required; pageSize up to 1000
+const auditLog    = await tools.getUserTrend({
+  userName: 'jane.doe@yourcompany.com',
+  fromDate: '2026-07-01',
+  toDate:   '2026-08-01',
+  pageSize: 1000,
+});
+
+// Burndown with optional date range
+const burndown    = await tools.getExecutionBurndown(364, 4312, {
+  startDate: '2026-07-22',
+  endDate:   '2026-08-27',
+});
 ```
 
 ---
@@ -230,6 +268,7 @@ const activity = await tools.getUserActivity(364, 4312, { days: 30 });
 ## 📊 Sample Outputs
 
 ### Release Readiness Report
+
 ```
 ════════════════════════════════════════════════════════════════════════════════
                     RELEASE READINESS REPORT
@@ -237,19 +276,20 @@ const activity = await tools.getUserActivity(364, 4312, { days: 30 });
 Project: 364  |  Release: 4312  |  2026-08-12T10:30:00.000Z
 ────────────────────────────────────────────────────────────────────────────────
 
-┌─────────────────────────┬──────────┬───────────┬─────────────────────────┐
-│ Gate                    │ Score    │ Status    │ Threshold               │
-├─────────────────────────┼──────────┼───────────┼─────────────────────────┤
-│ Requirement Coverage    │ 37.04%   │ 🔴 NO GO  │ ≥70% coverage           │
-│ Test Plan Analysis      │ 19.53%   │ 🔴 NO GO  │ ≥90% planned & assigned │
-│ Test Execution          │ 80%      │ 🔴 NO GO  │ ≥97% executed           │
-│ Defect Quality          │ 0B/0H    │ 🟢 GO     │ 0 blocker, ≤10 high     │
-└─────────────────────────┴──────────┴───────────┴─────────────────────────┘
+┌─────────────────────────┬──────────┬──────────────────┬─────────────────────────┐
+│ Gate                    │ Score    │ Status           │ Threshold               │
+├─────────────────────────┼──────────┼──────────────────┼─────────────────────────┤
+│ Requirement Coverage    │ 37.04%   │ 🔴 NO GO         │ ≥70% coverage           │
+│ Test Plan Analysis      │ 19.53%   │ 🔴 NO GO         │ ≥90% planned & assigned │
+│ Test Execution          │ 80%      │ 🔴 NO GO         │ ≥97% executed           │
+│ Defect Quality          │ 0B / 0H  │ 🟢 GO            │ 0 blockers, ≤10 high    │
+└─────────────────────────┴──────────┴──────────────────┴─────────────────────────┘
 
 OVERALL: 🔴 NO GO  (1/4 passed, 3 failed, 0 conditional)
 ```
 
 ### Project Health
+
 ```
 ══════════════════════════════════════════════════════════════════════
   PROJECT HEALTH
@@ -268,6 +308,7 @@ Health Score: 🟡 65/100 (MODERATE)
 ```
 
 ### User Activity
+
 ```
 ══════════════════════════════════════════════════════════════════════
   USER ACTIVITY
@@ -295,11 +336,10 @@ Health Score: 🟡 65/100 (MODERATE)
 ```yaml
 - name: Check Release Readiness
   env:
-    ZEPHYR_BASE_URL: ${{ secrets.ZEPHYR_URL }}
-    ZEPHYR_USERNAME: ${{ secrets.ZEPHYR_USER }}
-    ZEPHYR_PASSWORD: ${{ secrets.ZEPHYR_PASS }}
+    ZEPHYR_BASE_URL: ${{ secrets.ZEPHYR_BASE_URL }}
+    ZEPHYR_TOKEN: ${{ secrets.ZEPHYR_TOKEN }}
   run: |
-    npx zephyr-quality-gates -p ${{ vars.PROJECT_ID }} -r ${{ vars.RELEASE_ID }} --json > report.json
+    npx zephyr-enterprise-tools -p ${{ vars.PROJECT_ID }} -r ${{ vars.RELEASE_ID }} --json > report.json
     cat report.json
 ```
 
@@ -308,12 +348,11 @@ Health Score: 🟡 65/100 (MODERATE)
 ```groovy
 stage('Quality Gates') {
   environment {
-    ZEPHYR_BASE_URL = credentials('zephyr-url')
-    ZEPHYR_USERNAME = credentials('zephyr-user')
-    ZEPHYR_PASSWORD = credentials('zephyr-pass')
+    ZEPHYR_BASE_URL = credentials('zephyr-base-url')
+    ZEPHYR_TOKEN    = credentials('zephyr-token')
   }
   steps {
-    sh 'node quality-gates/cli.js -p ${PROJECT_ID} -r ${RELEASE_ID}'
+    sh 'npx zephyr-enterprise-tools -p ${PROJECT_ID} -r ${RELEASE_ID}'
   }
 }
 ```
@@ -327,7 +366,7 @@ Edit `quality-gates.js`:
 ```javascript
 export const THRESHOLDS = {
   requirementCoverage: {
-    go: 70,  // Change to 80 for stricter requirements
+    go: 70,           // Raise to 80 for stricter coverage requirements
   },
   testPlanAnalysis: {
     noGo: 80,
@@ -339,10 +378,21 @@ export const THRESHOLDS = {
   },
   defectQuality: {
     blockerLimit: 0,
-    highRiskLimit: 10,  // Change to 5 for stricter defect policy
+    highRiskLimit: 10, // Lower to 5 for a stricter defect policy
   }
 };
 ```
+
+---
+
+## 🐛 Common Issues
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `user_trend` returns 0 results | `userName` is not the full email address | Use full email e.g. `jane.doe@company.com` |
+| `search_test_cases` returns no results for `priority = "P1"` | `search_test_cases` does not support ZQL priority filters | Use `test_plan_analysis` with `query: 'priority = "P1"'` instead |
+| Auth failure in CI/CD | Using old `ZEPHYR_USERNAME` / `ZEPHYR_PASSWORD` env vars | Replace with `ZEPHYR_TOKEN` |
+| Burndown shows wrong date range | No date range specified — defaults to full release window | Pass `startDate` and `endDate` to scope the burndown |
 
 ---
 
