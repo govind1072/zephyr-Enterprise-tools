@@ -20,12 +20,13 @@ import QualityGates from './zephyr-enterprise-tools.js';
 const TOOLS = [
   {
     name: 'release_readiness',
-    description: 'Run all 4 quality gates to assess release readiness. Returns GO, CONDITIONAL GO, or NO GO status.',
+    description: 'Run all 4 quality gates with calculation details and action items. Optionally scope Test Plan Analysis to a Zephyr ZQL expression. Returns GO, CONDITIONAL GO, or NO GO status.',
     inputSchema: {
       type: 'object',
       properties: {
         projectId: { type: 'number', description: 'Zephyr project ID' },
         releaseId: { type: 'number', description: 'Zephyr release ID' },
+        query: { type: 'string', description: 'Optional Zephyr ZQL expression for Test Plan Analysis, e.g. priority = "P1"' },
       },
       required: ['projectId', 'releaseId'],
     },
@@ -265,7 +266,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     
     switch (name) {
       case 'release_readiness':
-        result = await tools.runAllGates(projectId, releaseId);
+        result = await tools.runAllGates(projectId, releaseId, { query: args.query });
         break;
         
       case 'requirement_coverage':

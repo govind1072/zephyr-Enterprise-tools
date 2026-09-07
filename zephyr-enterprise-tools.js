@@ -540,13 +540,20 @@ export class QualityGates {
 
   // ─── Run All Gates ──────────────────────────────────────────────────────────
 
-  async runAllGates(projectId, releaseId) {
-    const results = await Promise.all([
-      this.requirementCoverageGate(projectId, releaseId),
-      this.testPlanAnalysisGate(projectId, releaseId),
-      this.testExecutionGate(projectId, releaseId),
-      this.defectQualityGate(projectId, releaseId),
+  async runAllGates(projectId, releaseId, options = {}) {
+    const { query } = options;
+    const [results, project, releases] = await Promise.all([
+      Promise.all([
+        this.requirementCoverageGate(projectId, releaseId),
+        this.testPlanAnalysisGate(projectId, releaseId, { query }),
+        this.testExecutionGate(projectId, releaseId),
+        this.defectQualityGate(projectId, releaseId),
+      ]),
+      this.GET(`/project/${projectId}`).catch(() => ({})),
+      this.GET('/release', { projectid: projectId, isaliasallowed: false }).catch(() => []),
     ]);
+    const release = Array.isArray(releases) ? releases.find(item => Number(item.id) === Number(releaseId)) : undefined;
+    const generatedAt = new Date().toISOString();
     
     const gates = {
       requirementCoverage: results[0],
@@ -576,7 +583,13 @@ export class QualityGates {
     return {
       projectId,
       releaseId,
-      timestamp: new Date().toISOString(),
+      timestamp: generatedAt,
+      report: {
+        projectName: project.name || `Project ${projectId}`,
+        releaseName: release?.name || `Release ${releaseId}`,
+        generatedAt,
+        fileName: this.getReportFileName(project.name || `Project ${projectId}`, release?.name || `Release ${releaseId}`, generatedAt),
+      },
       overallStatus,
       summary: {
         passed: passedGates,
@@ -585,7 +598,69 @@ export class QualityGates {
         total: 4,
       },
       gates,
+      details: this.getReadinessDetails(gates, query),
       recommendation: this.getRecommendation(overallStatus, gates),
+    };
+  }
+
+  getReportFileName(projectName, releaseName, generatedAt) {
+    const safeSegment = value => String(value)
+      .trim()
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    const timestamp = new Date(generatedAt).toISOString();
+    const date = timestamp.slice(0, 10);
+    const time = timestamp.slice(11, 19).replace(/:/g, '-');
+
+    return `Release_Rediness_${safeSegment(projectName)}_${safeSegment(releaseName)}_${date}_${time}_UTC.pdf`;
+  }
+
+  getReadinessDetails(gates, query) {
+    const plan = gates.testPlanAnalysis;
+    const coverage = gates.requirementCoverage;
+    const execution = gates.testExecution;
+    const defects = gates.defectQuality;
+    const planAnalysis = plan.analysis;
+    const remainingToPlan = Math.max(0, planAnalysis.testcasePlanning.totalTestcases - planAnalysis.testcasePlanning.plannedTestcases);
+    const remainingToExecute = execution.incompleteTests;
+    const additionalTestsForGo = Math.max(0, Math.ceil((0.97 * execution.totalPlannedTests) - execution.completedTests));
+
+    return {
+      testPlanAnalysis: {
+        scope: query ? "ZQL-filtered test cases" : "Release-wide",
+        query: query || undefined,
+        calculation: {
+          testcasePlanning: `${planAnalysis.testcasePlanning.plannedTestcases} / ${planAnalysis.testcasePlanning.totalTestcases} = ${planAnalysis.testcasePlanning.percentage}%`,
+          executionAssignment: `${planAnalysis.executionAssignment.assignedExecutions} / ${planAnalysis.executionAssignment.totalExecutions} = ${planAnalysis.executionAssignment.percentage}%`,
+          overallPlanning: `(${planAnalysis.testcasePlanning.percentage}% + ${planAnalysis.executionAssignment.percentage}%) / 2 = ${plan.overallPlanningPercentage}%`,
+        },
+        actionItems: remainingToPlan > 0
+          ? [`Plan the remaining ${remainingToPlan} test cases.`, "Maintain execution assignment as tests are planned."]
+          : ["Maintain complete test planning and execution assignment."],
+      },
+      requirementCoverage: {
+        scope: "Release-wide",
+        calculation: `${coverage.coveredRequirements} / ${coverage.totalRequirements} = ${coverage.coveragePercentage}%`,
+        uncoveredRequirementIds: [],
+        detailAvailability: "Zephyr release summaries provide the uncovered count but not requirement IDs.",
+        actionItems: coverage.notCoveredRequirements > 0
+          ? [`Create and map tests for ${coverage.notCoveredRequirements} uncovered requirements.`, "Confirm requirement mappings before release sign-off."]
+          : ["Maintain requirement-to-test traceability through release sign-off."],
+      },
+      testExecution: {
+        scope: "Release-wide",
+        calculation: `${execution.completedTests} / ${execution.totalPlannedTests} = ${execution.executionPercentage}%`,
+        actionItems: remainingToExecute > 0
+          ? [`Execute or resolve ${remainingToExecute} incomplete tests.`, `Complete at least ${additionalTestsForGo} additional tests to reach the 97% GO threshold.`, ...(execution.breakdown.failed > 0 ? [`Investigate and rerun ${execution.breakdown.failed} failed test(s).`] : [])]
+          : ["Maintain execution completion through release sign-off."],
+      },
+      defectQuality: {
+        scope: "Release-wide",
+        defects: defects.breakdown,
+        actionItems: defects.unresolvedDefects > 0
+          ? ["Resolve all blocker defects.", "Reduce unresolved high-risk defects to 10 or fewer before approval."]
+          : ["Verify resolved defect fixes with targeted regression coverage.", "Confirm product-owner approval for any Won't Fix resolutions."],
+      },
     };
   }
 

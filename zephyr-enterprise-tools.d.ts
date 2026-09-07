@@ -70,8 +70,15 @@ export interface ReleaseReadinessResult {
   projectId: number;
   releaseId: number;
   timestamp: string;
+  report: {
+    projectName: string;
+    releaseName: string;
+    generatedAt: string;
+    fileName: string;
+  };
   overallStatus: GateStatus;
   summary: { passed: number; failed: number; conditional: number };
+  details: Record<string, unknown>;
   recommendation: string;
   gates: {
     requirementCoverage: RequirementCoverageResult;
@@ -185,7 +192,7 @@ export declare class QualityGates {
   testPlanAnalysisGate(projectId: number, releaseId: number, options?: TestPlanOptions): Promise<TestPlanResult>;
   testExecutionGate(projectId: number, releaseId: number): Promise<TestExecutionResult>;
   defectQualityGate(projectId: number, releaseId: number): Promise<DefectQualityResult>;
-  runAllGates(projectId: number, releaseId: number): Promise<ReleaseReadinessResult>;
+  runAllGates(projectId: number, releaseId: number, options?: TestPlanOptions): Promise<ReleaseReadinessResult>;
 
   // Analytics & Insights
   getProjectHealth(projectId: number, releaseId: number): Promise<ProjectHealthResult>;
