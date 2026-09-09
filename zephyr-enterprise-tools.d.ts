@@ -88,6 +88,30 @@ export interface ReleaseReadinessResult {
   };
 }
 
+export interface GateComparison {
+  metric: string;
+  releaseA: { status: GateStatus; value: number };
+  releaseB: { status: GateStatus; value: number };
+  delta: number;
+  statusChanged: boolean;
+  trend: 'improved' | 'regressed' | 'unchanged';
+}
+
+export interface CompareReleasesResult {
+  projectId: number;
+  timestamp: string;
+  query?: string;
+  releaseA: { releaseId: number; projectName: string; releaseName: string; generatedAt: string; fileName: string; overallStatus: GateStatus };
+  releaseB: { releaseId: number; projectName: string; releaseName: string; generatedAt: string; fileName: string; overallStatus: GateStatus };
+  overallStatusChanged: boolean;
+  gates: {
+    requirementCoverage: GateComparison;
+    testPlanAnalysis: GateComparison;
+    testExecution: GateComparison;
+    defectQuality: GateComparison;
+  };
+}
+
 export interface ProjectHealthResult {
   tool: string;
   projectId: number;
@@ -164,6 +188,14 @@ export interface UserActivityOptions {
   days?: number;
 }
 
+export interface UserActivityTrendSummary {
+  mostActiveUser: { userId: number; name: string; executed: number } | null;
+  leastActiveUser: { userId: number; name: string; executed: number } | null;
+  avgCompletionRate: number;
+  teamVelocityTrend: 'increasing' | 'decreasing' | 'steady' | 'insufficient data';
+  velocity: { firstHalfAvgPerDay: number; secondHalfAvgPerDay: number; changePct: number } | null;
+}
+
 export interface UserActivityResult {
   tool: string;
   projectId: number;
@@ -171,6 +203,7 @@ export interface UserActivityResult {
   timestamp: string;
   period: { days: number };
   teamSummary: Record<string, unknown>;
+  trendSummary: UserActivityTrendSummary;
   assignedTo: unknown[];
   executedBy: unknown[];
   topExecutors: unknown[];
@@ -184,6 +217,93 @@ export interface TrendsOptions {
   days?: number;
 }
 
+export interface ListUsersOptions {
+  pageSize?: number;
+}
+
+export interface ZephyrUser {
+  id: number;
+  fullName: string;
+  userName: string;
+  email: string;
+  title?: string;
+  location?: string;
+  accountEnabled: boolean;
+  roles: number[];
+}
+
+export interface ListUsersResult {
+  tool: string;
+  projectId: number;
+  timestamp: string;
+  total: number;
+  returned: number;
+  note?: string;
+  users: ZephyrUser[];
+}
+
+export interface ExecutionStatusBreakdown {
+  statusCode: number;
+  label: string;
+  count: number;
+}
+
+export interface ExecutionStatusCounts {
+  total: number;
+  breakdown: ExecutionStatusBreakdown[];
+}
+
+export interface CyclePhase {
+  id: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  executionStatusCounts: ExecutionStatusCounts | null;
+}
+
+export interface ZephyrCycle {
+  id: number;
+  name: string;
+  environment?: string;
+  build?: string;
+  startDate: string;
+  endDate: string;
+  status: number;
+  executionStatusCounts: ExecutionStatusCounts | null;
+  phases: CyclePhase[];
+}
+
+export interface ListCyclesResult {
+  tool: string;
+  releaseId: number;
+  timestamp: string;
+  total: number;
+  cycles: ZephyrCycle[];
+}
+
+export interface CyclePhaseDetail extends CyclePhase {
+  freeForm?: boolean;
+  resetExecution?: boolean;
+  hasChild?: boolean;
+}
+
+export interface GetCycleResult {
+  tool: string;
+  cycleId: number;
+  timestamp: string;
+  id: number;
+  name: string;
+  environment?: string;
+  build?: string;
+  startDate: string;
+  endDate: string;
+  status: number;
+  releaseId: number;
+  hasChild?: boolean;
+  executionStatusCounts: ExecutionStatusCounts | null;
+  phases: CyclePhaseDetail[];
+}
+
 export declare class QualityGates {
   constructor(config: ZephyrConfig);
 
@@ -193,6 +313,7 @@ export declare class QualityGates {
   testExecutionGate(projectId: number, releaseId: number): Promise<TestExecutionResult>;
   defectQualityGate(projectId: number, releaseId: number): Promise<DefectQualityResult>;
   runAllGates(projectId: number, releaseId: number, options?: TestPlanOptions): Promise<ReleaseReadinessResult>;
+  compareReleases(projectId: number, releaseId1: number, releaseId2: number, options?: TestPlanOptions): Promise<CompareReleasesResult>;
 
   // Analytics & Insights
   getProjectHealth(projectId: number, releaseId: number): Promise<ProjectHealthResult>;
@@ -202,6 +323,9 @@ export declare class QualityGates {
   getTestCaseTrends(projectId: number, releaseId: number, options?: TrendsOptions): Promise<TestTrendsResult>;
   searchTestCases(projectId: number, releaseId: number, options?: SearchTestCasesOptions): Promise<SearchTestCasesResult>;
   getUserActivity(projectId: number, releaseId: number, options?: UserActivityOptions): Promise<UserActivityResult>;
+  listUsers(projectId: number, options?: ListUsersOptions): Promise<ListUsersResult>;
+  listCycles(releaseId: number): Promise<ListCyclesResult>;
+  getCycle(cycleId: number): Promise<GetCycleResult>;
 }
 
 export declare const THRESHOLDS: ThresholdConfig;

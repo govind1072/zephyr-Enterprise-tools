@@ -32,6 +32,20 @@ const TOOLS = [
     },
   },
   {
+    name: 'compare_releases',
+    description: 'Run release readiness for two releases in the same project and return a side-by-side diff across all 4 gates, including which gate statuses changed and their metric deltas.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'number', description: 'Zephyr project ID' },
+        releaseId1: { type: 'number', description: 'First (baseline) Zephyr release ID' },
+        releaseId2: { type: 'number', description: 'Second (comparison) Zephyr release ID' },
+        query: { type: 'string', description: 'Optional Zephyr ZQL expression for Test Plan Analysis, e.g. priority = "P1"' },
+      },
+      required: ['projectId', 'releaseId1', 'releaseId2'],
+    },
+  },
+  {
     name: 'requirement_coverage',
     description: 'Check if requirements are covered by test cases. Threshold: ≥70% = GO.',
     inputSchema: {
@@ -220,6 +234,39 @@ const TOOLS = [
       required: ['projectId'],
     },
   },
+  {
+    name: 'list_users',
+    description: 'List all users assigned to a project, with name, email, role, and account status.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'number', description: 'Zephyr project ID' },
+      },
+      required: ['projectId'],
+    },
+  },
+  {
+    name: 'list_cycles',
+    description: 'List all test cycles for a release, including their phases and date ranges.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        releaseId: { type: 'number', description: 'Zephyr release ID' },
+      },
+      required: ['releaseId'],
+    },
+  },
+  {
+    name: 'get_cycle',
+    description: 'Get full detail for a single test cycle, including its phases.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cycleId: { type: 'number', description: 'Zephyr cycle ID' },
+      },
+      required: ['cycleId'],
+    },
+  },
 ];
 
 // ─── MCP Server ───────────────────────────────────────────────────────────────
@@ -267,6 +314,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case 'release_readiness':
         result = await tools.runAllGates(projectId, releaseId, { query: args.query });
+        break;
+        
+      case 'compare_releases':
+        result = await tools.compareReleases(projectId, args.releaseId1, args.releaseId2, { query: args.query });
         break;
         
       case 'requirement_coverage':
@@ -362,6 +413,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             endDate: r.releaseEndDate,
           })),
         };
+        break;
+
+      case 'list_users':
+        result = await tools.listUsers(projectId);
+        break;
+
+      case 'list_cycles':
+        result = await tools.listCycles(releaseId);
+        break;
+
+      case 'get_cycle':
+        result = await tools.getCycle(args.cycleId);
         break;
         
       default:

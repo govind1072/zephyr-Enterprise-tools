@@ -54,12 +54,32 @@ export const BLOCKER_PRIORITIES = ['blocker', 'critical', 'p1', '1', 'highest'];
 export const HIGH_RISK_PRIORITIES = ['high', 'medium', 'p2', 'p3', '2', '3'];
 export const LOW_RISK_PRIORITIES = ['low', 'trivial', 'p4', 'p5', '4', '5', 'lowest', 'minor'];
 
+const TEST_RESULT_STATUS_LOV_NAME = "testresult.testresultStatus.LOV";
+const DEFAULT_TEST_RESULT_STATUS_IDS = {
+  unexecuted: new Set([0]),
+  passed: new Set([1]),
+  failed: new Set([2]),
+  wip: new Set([3]),
+  blocked: new Set([4]),
+  notApplicable: new Set([5]),
+};
+
+const TEST_RESULT_STATUS_MATCHERS = {
+  unexecuted: [/\bunexecuted\b/, /\bnot\s+executed\b/, /\bnot\s+run\b/, /\bno\s+run\b/],
+  passed: [/\bpass(?:ed)?\b/],
+  failed: [/\bfail(?:ed)?\b/],
+  wip: [/\bwip\b/, /\bwork\s+in\s+progress\b/],
+  blocked: [/\bblocked\b/],
+  notApplicable: [/\bnot\s+applicable\b/, /\bn\/?a\b/],
+};
+
 // ─── Quality Gates Class ──────────────────────────────────────────────────────
 
 export class QualityGates {
   constructor(config) {
     this.baseUrl = (config.baseUrl || process.env.ZEPHYR_BASE_URL || "").replace(/\/$/, "");
     this.token = config.token || process.env.ZEPHYR_TOKEN || "";
+    this.testResultStatusMapPromise = null;
     
     if (!this.baseUrl) {
       throw new Error("ZEPHYR_BASE_URL is required");
@@ -125,6 +145,139 @@ export class QualityGates {
       throw new Error(`Zephyr v3 API ${res.status}: ${text}`);
     }
     return res.json();
+  }
+
+  async GETv4(path, params = {}) {
+    // Build v4 URL by replacing /latest with /v4 in baseUrl
+    const v4BaseUrl = this.baseUrl.replace('/latest', '/v4');
+    const url = new URL(`${v4BaseUrl}${path}`);
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
+    }
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: { Accept: "application/json", "Content-Type": "application/json", ...this.authHeader() },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Zephyr v4 API ${res.status}: ${text}`);
+    }
+    return res.json();
+  }
+
+  async getTestResultStatusMap() {
+    if (!this.testResultStatusMapPromise) {
+      this.testResultStatusMapPromise = this.loadTestResultStatusMap().catch(error => {
+        this.testResultStatusMapPromise = null;
+        console.warn(`Unable to load ${TEST_RESULT_STATUS_LOV_NAME}; using default execution status IDs. ${error.message}`);
+        return this.cloneDefaultTestResultStatusIds();
+      });
+    }
+    return this.testResultStatusMapPromise;
+  }
+
+  async loadTestResultStatusMap() {
+    const preferences = await this.GETv4("/admin/preference/all/system");
+    const preferenceList = Array.isArray(preferences)
+      ? preferences
+      : preferences.results || preferences.data || preferences.preferences || Object.values(preferences || {});
+    const preference = preferenceList.find(item => item?.name === TEST_RESULT_STATUS_LOV_NAME);
+
+    if (!preference) {
+      throw new Error(`${TEST_RESULT_STATUS_LOV_NAME} was not found in system preferences`);
+    }
+
+    const statusRows = this.extractTestResultStatusRows(preference.value ?? preference.lov ?? preference);
+    if (statusRows.length === 0) {
+      throw new Error(`${TEST_RESULT_STATUS_LOV_NAME} did not include any status rows`);
+    }
+
+    const statusMap = this.createEmptyTestResultStatusIds();
+
+    for (const row of statusRows) {
+      const category = this.getTestResultStatusCategory(row.label);
+      if (category) statusMap[category].add(row.id);
+    }
+
+    if (Object.values(statusMap).every(ids => ids.size === 0)) {
+      throw new Error(`${TEST_RESULT_STATUS_LOV_NAME} did not include recognized execution statuses`);
+    }
+
+    return statusMap;
+  }
+
+  createEmptyTestResultStatusIds() {
+    return Object.fromEntries(Object.keys(DEFAULT_TEST_RESULT_STATUS_IDS).map(status => [status, new Set()]));
+  }
+
+  cloneDefaultTestResultStatusIds() {
+    return Object.fromEntries(
+      Object.entries(DEFAULT_TEST_RESULT_STATUS_IDS).map(([status, ids]) => [status, new Set(ids)])
+    );
+  }
+
+  extractTestResultStatusRows(value) {
+    const parsed = typeof value === "string" ? this.parsePreferenceValue(value) : value;
+    const rows = [];
+
+    const visit = (item) => {
+      if (!item || typeof item !== "object") return;
+      if (Array.isArray(item)) {
+        item.forEach(visit);
+        return;
+      }
+
+      const id = this.getStatusIdFromPreferenceItem(item);
+      const label = this.getStatusLabelFromPreferenceItem(item);
+      if (id !== null && label) rows.push({ id, label });
+
+      for (const key of ["items", "values", "options", "lov", "list", "children", "data", "results"]) {
+        if (item[key]) visit(item[key]);
+      }
+    };
+
+    visit(parsed);
+    return rows;
+  }
+
+  parsePreferenceValue(value) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value.split(/[;,\n]/).map(entry => {
+        const [id, label] = entry.split(/[:=|]/).map(part => part?.trim());
+        return { id, label };
+      });
+    }
+  }
+
+  getStatusIdFromPreferenceItem(item) {
+    for (const key of ["id", "statusId", "statusID", "value", "listValueId", "listValueID"]) {
+      const numberValue = Number(item[key]);
+      if (Number.isInteger(numberValue)) return numberValue;
+    }
+    return null;
+  }
+
+  getStatusLabelFromPreferenceItem(item) {
+    for (const key of ["label", "name", "status", "displayName", "displayValue", "text", "title"]) {
+      if (typeof item[key] === "string" && item[key].trim()) return item[key].trim();
+    }
+    return "";
+  }
+
+  getTestResultStatusCategory(label) {
+    const normalized = label.toLowerCase();
+    return Object.entries(TEST_RESULT_STATUS_MATCHERS)
+      .find(([, matchers]) => matchers.some(matcher => matcher.test(normalized)))?.[0] || null;
+  }
+
+  getExecutionStatusId(exec) {
+    return Number(exec.lastTestResult?.executionStatus ?? exec.status ?? exec.executionStatus ?? 0);
+  }
+
+  isExecutionStatus(exec, statusMap, category) {
+    return statusMap[category]?.has(this.getExecutionStatusId(exec)) || false;
   }
 
   async searchExecutionsByZql(releaseId, query) {
@@ -309,6 +462,7 @@ export class QualityGates {
   // ─── Gate 3: Test Execution Gate ────────────────────────────────────────────
 
   async testExecutionGate(projectId, releaseId) {
+    const statusMap = await this.getTestResultStatusMap();
     const executionData = await this.GET("/execution", {
       releaseid: releaseId,
       offset: 0,
@@ -337,15 +491,12 @@ export class QualityGates {
     let passed = 0, failed = 0, notApplicable = 0, wip = 0, blocked = 0, notExecuted = 0;
     
     for (const exec of executions) {
-      const status = exec.lastTestResult?.executionStatus || exec.status || exec.executionStatus || 0;
-      switch (Number(status)) {
-        case 1: passed++; break;
-        case 2: failed++; break;
-        case 3: wip++; break;
-        case 4: blocked++; break;
-        case 5: notApplicable++; break;
-        default: notExecuted++; break;
-      }
+      if (this.isExecutionStatus(exec, statusMap, "passed")) passed++;
+      else if (this.isExecutionStatus(exec, statusMap, "failed")) failed++;
+      else if (this.isExecutionStatus(exec, statusMap, "wip")) wip++;
+      else if (this.isExecutionStatus(exec, statusMap, "blocked")) blocked++;
+      else if (this.isExecutionStatus(exec, statusMap, "notApplicable")) notApplicable++;
+      else notExecuted++;
     }
     
     const completedTests = passed + failed + notApplicable;
@@ -692,6 +843,53 @@ export class QualityGates {
     }
   }
 
+  // ─── Compare Releases ────────────────────────────────────────────────────────
+
+  async compareReleases(projectId, releaseId1, releaseId2, options = {}) {
+    const { query } = options;
+    const [readinessA, readinessB] = await Promise.all([
+      this.runAllGates(projectId, releaseId1, { query }),
+      this.runAllGates(projectId, releaseId2, { query }),
+    ]);
+
+    // higherIsBetter: true means a larger metric value is the healthier direction
+    const gateMetrics = [
+      { key: "requirementCoverage", metric: "coveragePercentage", higherIsBetter: true },
+      { key: "testPlanAnalysis", metric: "overallPlanningPercentage", higherIsBetter: true },
+      { key: "testExecution", metric: "executionPercentage", higherIsBetter: true },
+      { key: "defectQuality", metric: "unresolvedDefects", higherIsBetter: false },
+    ];
+
+    const gates = {};
+    for (const { key, metric, higherIsBetter } of gateMetrics) {
+      const gateA = readinessA.gates[key];
+      const gateB = readinessB.gates[key];
+      const valueA = gateA[metric];
+      const valueB = gateB[metric];
+      const delta = Math.round((valueB - valueA) * 100) / 100;
+      const trend = delta === 0 ? "unchanged" : (delta > 0) === higherIsBetter ? "improved" : "regressed";
+
+      gates[key] = {
+        metric,
+        releaseA: { status: gateA.status, value: valueA },
+        releaseB: { status: gateB.status, value: valueB },
+        delta,
+        statusChanged: gateA.status !== gateB.status,
+        trend,
+      };
+    }
+
+    return {
+      projectId,
+      timestamp: new Date().toISOString(),
+      query: query || undefined,
+      releaseA: { releaseId: releaseId1, ...readinessA.report, overallStatus: readinessA.overallStatus },
+      releaseB: { releaseId: releaseId2, ...readinessB.report, overallStatus: readinessB.overallStatus },
+      overallStatusChanged: readinessA.overallStatus !== readinessB.overallStatus,
+      gates,
+    };
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // TOOL 5: PROJECT HEALTH
   // ═══════════════════════════════════════════════════════════════════════════
@@ -916,6 +1114,7 @@ export class QualityGates {
 
   async getFailedTests(projectId, releaseId, options = {}) {
     const { limit = 50, includeSteps = false } = options;
+    const statusMap = await this.getTestResultStatusMap();
     
     // Get all executions
     const executionData = await this.GET("/execution", {
@@ -927,11 +1126,7 @@ export class QualityGates {
     
     const executions = executionData.results || executionData || [];
     
-    // Filter to failed tests (status = 2)
-    const failedExecutions = executions.filter(exec => {
-      const status = exec.lastTestResult?.executionStatus || exec.status || exec.executionStatus || 0;
-      return Number(status) === 2;
-    });
+    const failedExecutions = executions.filter(exec => this.isExecutionStatus(exec, statusMap, "failed"));
     
     // Build failed test list
     const failedTests = failedExecutions.slice(0, limit).map(exec => {
@@ -952,7 +1147,7 @@ export class QualityGates {
     // Summary stats
     const totalExecutions = executions.length;
     const failedCount = failedExecutions.length;
-    const passedCount = executions.filter(e => Number(e.lastTestResult?.executionStatus || e.status || 0) === 1).length;
+    const passedCount = executions.filter(exec => this.isExecutionStatus(exec, statusMap, "passed")).length;
     
     return {
       tool: "Failed Tests",
@@ -1052,6 +1247,7 @@ export class QualityGates {
 
   async getTestCaseTrends(projectId, releaseId, options = {}) {
     const { days = 30 } = options;
+    const statusMap = await this.getTestResultStatusMap();
     
     // Calculate start date for ZQL query
     const now = new Date();
@@ -1105,15 +1301,12 @@ export class QualityGates {
         trendsByDate[dateKey] = { passed: 0, failed: 0, blocked: 0, wip: 0, total: 0 };
       }
       
-      const status = exec.status || '0';
       trendsByDate[dateKey].total++;
-      
-      switch (String(status)) {
-        case '1': trendsByDate[dateKey].passed++; break;
-        case '2': trendsByDate[dateKey].failed++; break;
-        case '3': trendsByDate[dateKey].wip++; break;
-        case '4': trendsByDate[dateKey].blocked++; break;
-      }
+
+      if (this.isExecutionStatus(exec, statusMap, "passed")) trendsByDate[dateKey].passed++;
+      else if (this.isExecutionStatus(exec, statusMap, "failed")) trendsByDate[dateKey].failed++;
+      else if (this.isExecutionStatus(exec, statusMap, "wip")) trendsByDate[dateKey].wip++;
+      else if (this.isExecutionStatus(exec, statusMap, "blocked")) trendsByDate[dateKey].blocked++;
     }
     
     // Convert to sorted array
@@ -1281,6 +1474,7 @@ export class QualityGates {
 
   async getUserActivity(projectId, releaseId, options = {}) {
     const { days = 30 } = options;
+    const statusMap = await this.getTestResultStatusMap();
     
     // Get executions to analyze user activity
     const executionData = await this.GET("/execution", {
@@ -1335,7 +1529,7 @@ export class QualityGates {
       const executorName = userCache[executorId] || "Unknown";
       
       const executedOn = exec.lastTestResult?.executedOn || exec.executedOn;
-      const status = exec.lastTestResult?.executionStatus || exec.status || 0;
+      const isExecuted = !this.isExecutionStatus(exec, statusMap, "unexecuted");
       
       // Track assigned stats
       if (!assignedStats[assignedName]) {
@@ -1352,17 +1546,15 @@ export class QualityGates {
       }
       assignedStats[assignedName].assigned++;
       
-      if (Number(status) > 0) {
+      if (isExecuted) {
         assignedStats[assignedName].executed++;
-        switch (Number(status)) {
-          case 1: assignedStats[assignedName].passed++; break;
-          case 2: assignedStats[assignedName].failed++; break;
-          case 4: assignedStats[assignedName].blocked++; break;
-        }
+        if (this.isExecutionStatus(exec, statusMap, "passed")) assignedStats[assignedName].passed++;
+        else if (this.isExecutionStatus(exec, statusMap, "failed")) assignedStats[assignedName].failed++;
+        else if (this.isExecutionStatus(exec, statusMap, "blocked")) assignedStats[assignedName].blocked++;
       }
       
       // Track executor stats (who actually ran tests)
-      if (Number(status) > 0 && executorId && executorId > 0) {
+      if (isExecuted && executorId && executorId > 0) {
         if (!executorStats[executorName]) {
           executorStats[executorName] = {
             userId: executorId,
@@ -1376,11 +1568,9 @@ export class QualityGates {
         }
         
         executorStats[executorName].executed++;
-        switch (Number(status)) {
-          case 1: executorStats[executorName].passed++; break;
-          case 2: executorStats[executorName].failed++; break;
-          case 4: executorStats[executorName].blocked++; break;
-        }
+        if (this.isExecutionStatus(exec, statusMap, "passed")) executorStats[executorName].passed++;
+        else if (this.isExecutionStatus(exec, statusMap, "failed")) executorStats[executorName].failed++;
+        else if (this.isExecutionStatus(exec, statusMap, "blocked")) executorStats[executorName].blocked++;
         
         if (executedOn) {
           const execDate = new Date(executedOn);
@@ -1413,7 +1603,51 @@ export class QualityGates {
       totalPassed: acc.totalPassed + user.passed,
       totalFailed: acc.totalFailed + user.failed,
     }), { totalExecuted: 0, totalPassed: 0, totalFailed: 0 });
-    
+
+    // Team velocity trend — compare average daily executions across the
+    // first and second half of the dates actually present in the data.
+    const dailyCounts = {};
+    for (const exec of executions) {
+      if (this.isExecutionStatus(exec, statusMap, "unexecuted")) continue;
+      const executedOn = exec.lastTestResult?.executedOn || exec.executedOn;
+      if (!executedOn) continue;
+      const dateKey = new Date(executedOn).toISOString().split('T')[0];
+      dailyCounts[dateKey] = (dailyCounts[dateKey] || 0) + 1;
+    }
+
+    const sortedDates = Object.keys(dailyCounts).sort();
+    let teamVelocityTrend = "insufficient data";
+    let velocity = null;
+    if (sortedDates.length >= 2) {
+      const midpoint = Math.floor(sortedDates.length / 2);
+      const firstHalfDates = sortedDates.slice(0, midpoint);
+      const secondHalfDates = sortedDates.slice(midpoint);
+      const firstHalfAvg = firstHalfDates.reduce((sum, d) => sum + dailyCounts[d], 0) / firstHalfDates.length;
+      const secondHalfAvg = secondHalfDates.reduce((sum, d) => sum + dailyCounts[d], 0) / secondHalfDates.length;
+      const changePct = firstHalfAvg > 0 ? Math.round(((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100) : null;
+
+      teamVelocityTrend = changePct === null
+        ? "insufficient data"
+        : changePct > 10 ? "increasing" : changePct < -10 ? "decreasing" : "steady";
+      velocity = {
+        firstHalfAvgPerDay: Math.round(firstHalfAvg * 100) / 100,
+        secondHalfAvgPerDay: Math.round(secondHalfAvg * 100) / 100,
+        changePct,
+      };
+    }
+
+    const avgCompletionRate = assignedUsers.length > 0
+      ? Math.round((assignedUsers.reduce((sum, u) => sum + u.completionRate, 0) / assignedUsers.length) * 100) / 100
+      : 0;
+
+    // executors is sorted descending by executed count, and every entry has executed >= 1
+    const mostActiveUser = executors.length > 0
+      ? { userId: executors[0].userId, name: executors[0].name, executed: executors[0].executed }
+      : null;
+    const leastActiveUser = executors.length > 0
+      ? { userId: executors[executors.length - 1].userId, name: executors[executors.length - 1].name, executed: executors[executors.length - 1].executed }
+      : null;
+
     return {
       tool: "User Activity",
       projectId,
@@ -1429,6 +1663,13 @@ export class QualityGates {
           ? Math.round((teamSummary.totalPassed / teamSummary.totalExecuted) * 100) 
           : 0,
       },
+      trendSummary: {
+        mostActiveUser,
+        leastActiveUser,
+        avgCompletionRate,
+        teamVelocityTrend,
+        velocity,
+      },
       assignedTo: assignedUsers,
       executedBy: executors,
       topExecutors: executors.slice(0, 5),
@@ -1439,16 +1680,37 @@ export class QualityGates {
 
   async getExecutionBurndown(projectId, releaseId, options = {}) {
     const { startDate = null, endDate = null } = options;
+    const statusMap = await this.getTestResultStatusMap();
 
-    // Fetch all executions for the release
-    const executionData = await this.GET('/execution', {
-      releaseid: releaseId,
-      offset: 0,
-      pagesize: 10000,
-      includeanyoneuser: true,
-    });
-    const executions = executionData.results || executionData || [];
+    // Fetch all executions for the release, paginating until a page repeats
+    // no new records. /execution's resultSize is unreliable (often 0) and its
+    // offset can silently replay the last page instead of returning empty, so
+    // pagination must stop based on de-duplicated record growth, not offsets.
+    const executionsById = new Map();
+    let currentOffset = 0;
+    const pageSize = 10000;
+
+    while (true) {
+      const executionData = await this.GET('/execution', {
+        releaseid: releaseId,
+        offset: currentOffset,
+        pagesize: pageSize,
+        includeanyoneuser: true,
+      });
+      const page = executionData.results || executionData || [];
+
+      if (!Array.isArray(page) || page.length === 0) break;
+
+      const sizeBefore = executionsById.size;
+      for (const exec of page) executionsById.set(exec.id, exec);
+      currentOffset += page.length;
+
+      if (executionsById.size === sizeBefore) break;
+    }
+
+    const executions = [...executionsById.values()];
     const total = executions.length;
+    const totalPlanned = total;
 
     if (total === 0) {
       return {
@@ -1457,6 +1719,7 @@ export class QualityGates {
         releaseId,
         timestamp: new Date().toISOString(),
         total: 0,
+        totalPlanned: 0,
         message: 'No executions found for this release.',
         dailyBurndown: [],
       };
@@ -1478,9 +1741,7 @@ export class QualityGates {
       if (!rawDate) continue;
       const dateKey = new Date(rawDate).toISOString().split('T')[0];
       if (dateKey < rangeStart || dateKey > rangeEnd) continue;
-      const status = String(exec.lastTestResult?.executionStatus || exec.status || exec.executionStatus || '0');
-      // Count as "executed" if not unexecuted (status 0)
-      if (status !== '0') {
+      if (!this.isExecutionStatus(exec, statusMap, "unexecuted")) {
         executedByDate[dateKey] = (executedByDate[dateKey] || 0) + 1;
       }
     }
@@ -1526,6 +1787,7 @@ export class QualityGates {
       timestamp: new Date().toISOString(),
       dateRange: { from: rangeStart, to: rangeEnd },
       total,
+      totalPlanned,
       summary: {
         totalExecutions: total,
         executed: lastDay.cumulativeExecuted,
@@ -1630,6 +1892,180 @@ export class QualityGates {
         releaseName: log.releaseName,
         createdOn:   log.createdOn,
         ipAddress:   log.ipAddress,
+      })),
+    };
+  }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: LIST USERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async listUsers(projectId, options = {}) {
+    const { pageSize = 50 } = options;
+    const usersById = new Map();
+    let currentOffset = 0;
+    let resultSize = null;
+
+    // order=id keeps pages deterministic; without it, this endpoint returns
+    // overlapping/shuffled records across pages.
+    while (true) {
+      const response = await this.GETv4(`/user/assignedProject/${projectId}`, {
+        isLite: false,
+        adminUser: false,
+        pagesize: pageSize,
+        offset: currentOffset,
+        isPaginated: true,
+        order: "id",
+        isascorder: true,
+      });
+      const page = response.results || [];
+      resultSize = response.resultSize ?? resultSize;
+
+      if (page.length === 0) break;
+
+      const sizeBefore = usersById.size;
+      for (const user of page) usersById.set(user.id, user);
+      currentOffset += page.length;
+
+      // Some Zephyr instances stop returning new records past an internal
+      // offset cap even though resultSize is higher; stop rather than loop.
+      if (usersById.size === sizeBefore) break;
+      if (resultSize !== null && usersById.size >= resultSize) break;
+    }
+
+    const users = [...usersById.values()];
+
+    return {
+      tool: "List Users",
+      projectId,
+      timestamp: new Date().toISOString(),
+      total: resultSize ?? users.length,
+      returned: users.length,
+      note: resultSize !== null && users.length < resultSize
+        ? `Zephyr reports ${resultSize} assigned users but only ${users.length} were reachable through pagination. This is a known API limitation, not a client-side truncation.`
+        : undefined,
+      users: users.map(user => ({
+        id: user.id,
+        fullName: user.fullName,
+        userName: user.userName,
+        email: user.email,
+        title: user.title,
+        location: user.location,
+        accountEnabled: user.accountEnabled,
+        roles: (user.roles || []).map(role => role.id),
+      })),
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: LIST CYCLES
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async getCycleStatusCounts(releaseId) {
+    const raw = await this.GETv3(`/cycle/status/count/${releaseId}`, {
+      isHideCycleEnabled: true,
+    });
+
+    // Each cycle maps phaseId -> statusCode -> count, plus a "-1" phase key
+    // holding the cycle-level total across all its phases.
+    const byCycleId = {};
+    for (const [cycleId, phaseMap] of Object.entries(raw || {})) {
+      const phases = {};
+      let cycleTotal = null;
+      for (const [phaseId, statusCounts] of Object.entries(phaseMap || {})) {
+        const formatted = await this.formatExecutionStatusCounts(statusCounts);
+        if (phaseId === "-1") cycleTotal = formatted;
+        else phases[phaseId] = formatted;
+      }
+      byCycleId[cycleId] = { cycleTotal, phases };
+    }
+    return byCycleId;
+  }
+
+  async formatExecutionStatusCounts(statusCounts) {
+    const statusMap = await this.getTestResultStatusMap();
+    const STATUS_LABELS = Object.fromEntries(
+      Object.entries(statusMap).flatMap(([label, ids]) => [...ids].map(id => [id, label]))
+    );
+    const { "-1": total = 0, ...counts } = statusCounts || {};
+
+    return {
+      total,
+      breakdown: Object.entries(counts)
+        .map(([statusCode, count]) => ({
+          statusCode: Number(statusCode),
+          label: STATUS_LABELS[statusCode] || `Custom Status ${statusCode}`,
+          count,
+        }))
+        .sort((a, b) => b.count - a.count),
+    };
+  }
+
+  async listCycles(releaseId) {
+    const [cycles, statusCounts] = await Promise.all([
+      this.GETv3(`/cycle/release/${releaseId}`, { sortKey: "name", isHideCycleEnabled: true }),
+      this.getCycleStatusCounts(releaseId),
+    ]);
+
+    return {
+      tool: "List Cycles",
+      releaseId,
+      timestamp: new Date().toISOString(),
+      total: Array.isArray(cycles) ? cycles.length : 0,
+      cycles: (cycles || []).map(cycle => {
+        const cycleStatus = statusCounts[String(cycle.id)] || {};
+        return {
+          id: cycle.id,
+          name: cycle.name,
+          environment: cycle.environment,
+          build: cycle.build,
+          startDate: cycle.cycleStartDate,
+          endDate: cycle.cycleEndDate,
+          status: cycle.status,
+          executionStatusCounts: cycleStatus.cycleTotal || null,
+          phases: (cycle.cyclePhases || []).map(phase => ({
+            id: phase.id,
+            name: phase.name,
+            startDate: phase.phaseStartDate,
+            endDate: phase.phaseEndDate,
+            executionStatusCounts: cycleStatus.phases?.[String(phase.id)] || null,
+          })),
+        };
+      }),
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: GET CYCLE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async getCycle(cycleId) {
+    const cycle = await this.GETv3(`/cycle/${cycleId}`, {});
+    const statusCounts = await this.getCycleStatusCounts(cycle.releaseId);
+    const cycleStatus = statusCounts[String(cycleId)] || {};
+
+    return {
+      tool: "Get Cycle",
+      cycleId,
+      timestamp: new Date().toISOString(),
+      id: cycle.id,
+      name: cycle.name,
+      environment: cycle.environment,
+      build: cycle.build,
+      startDate: cycle.cycleStartDate,
+      endDate: cycle.cycleEndDate,
+      status: cycle.status,
+      releaseId: cycle.releaseId,
+      hasChild: cycle.hasChild,
+      executionStatusCounts: cycleStatus.cycleTotal || null,
+      phases: (cycle.cyclePhases || []).map(phase => ({
+        id: phase.id,
+        name: phase.name,
+        startDate: phase.phaseStartDate,
+        endDate: phase.phaseEndDate,
+        freeForm: phase.freeForm,
+        resetExecution: phase.resetExecution,
+        hasChild: phase.hasChild,
+        executionStatusCounts: cycleStatus.phases?.[String(phase.id)] || null,
       })),
     };
   }

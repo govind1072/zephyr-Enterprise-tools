@@ -42,6 +42,7 @@ function parseArgs() {
     query: '',
     days: 30,
     limit: 50,
+    cycleId: null,
   };
   
   for (let i = 0; i < args.length; i++) {
@@ -75,6 +76,10 @@ function parseArgs() {
       case '-l':
       case '--limit':
         options.limit = parseInt(args[++i], 10) || 50;
+        break;
+      case '-c':
+      case '--cycle':
+        options.cycleId = Number(args[++i]);
         break;
       case '--json':
         options.format = 'json';
@@ -117,6 +122,7 @@ OPTIONS:
   -q, --query <text>    Search query (for search-tests)
   -d, --days <n>        Number of days for trends/activity (default: 30)
   -l, --limit <n>       Max results to return (default: 50)
+  -c, --cycle <id>      Cycle ID (for get-cycle)
       --json            Output as JSON
       --table           Output as table (default)
   -h, --help            Show this help
@@ -140,6 +146,8 @@ AVAILABLE TOOLS:
   │  test-trends           Test execution trends over time                      │
   │  search-tests          Search test cases by query                           │
   │  user-activity         User activity and productivity metrics               │
+  │  list-cycles           List all cycles for a release with phase details      │
+  │  get-cycle             Get full details for one cycle (-c <cycleId>)         │
   └─────────────────────────────────────────────────────────────────────────────┘
 
 ENVIRONMENT VARIABLES:
@@ -164,6 +172,12 @@ EXAMPLES:
 
   # Get user activity report
   zephyr-tools -p 364 -r 4312 -t user-activity
+
+  # List all cycles and phase details for a release
+  zephyr-tools -p 364 -r 4312 -t list-cycles
+
+  # Get a single cycle detail
+  zephyr-tools -p 364 -r 4312 -t get-cycle -c 98765
 
 QUALITY GATE THRESHOLDS:
   Requirement Coverage:  ≥70% = GO
@@ -412,6 +426,16 @@ function formatGenericResult(result) {
     }
     console.log('   └────────────┴───────┴────────┴────────┴─────────┘');
   }
+
+  // Cycles list/detail
+  if (result.cycles && result.cycles.length > 0) {
+    console.log(`\n🔁 CYCLES (${result.total || result.cycles.length}):`);
+    for (const cycle of result.cycles) {
+      printCycleDetail(cycle);
+    }
+  } else if (result.tool === 'Get Cycle' || result.cycleId) {
+    printCycleDetail(result);
+  }
   
   // Recommendations
   if (result.recommendations) {
@@ -447,6 +471,35 @@ function formatKey(key) {
     .replace(/_/g, ' ')
     .replace(/^\w/, c => c.toUpperCase())
     .trim();
+}
+
+function printCycleDetail(cycle) {
+  console.log(`   • ${cycle.name || 'Unnamed Cycle'} [ID: ${cycle.id || cycle.cycleId}]`);
+  if (cycle.environment || cycle.build || cycle.status) {
+    console.log(`     Environment: ${cycle.environment || 'N/A'} | Build: ${cycle.build || 'N/A'} | Status: ${cycle.status || 'N/A'}`);
+  }
+  if (cycle.startDate || cycle.endDate) {
+    console.log(`     Dates: ${cycle.startDate || 'N/A'} → ${cycle.endDate || 'N/A'}`);
+  }
+  if (cycle.executionStatusCounts?.breakdown?.length) {
+    const breakdown = cycle.executionStatusCounts.breakdown
+      .map(item => `${item.label}: ${item.count}`)
+      .join(', ');
+    console.log(`     Execution Status: total ${cycle.executionStatusCounts.total}; ${breakdown}`);
+  }
+  if (cycle.phases?.length) {
+    console.log(`     Phases (${cycle.phases.length}):`);
+    for (const phase of cycle.phases) {
+      const dates = phase.startDate || phase.endDate ? ` (${phase.startDate || 'N/A'} → ${phase.endDate || 'N/A'})` : '';
+      console.log(`       - ${phase.name || 'Unnamed Phase'} [ID: ${phase.id}]${dates}`);
+      if (phase.executionStatusCounts?.breakdown?.length) {
+        const breakdown = phase.executionStatusCounts.breakdown
+          .map(item => `${item.label}: ${item.count}`)
+          .join(', ');
+        console.log(`         Execution Status: total ${phase.executionStatusCounts.total}; ${breakdown}`);
+      }
+    }
+  }
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -514,6 +567,16 @@ async function main() {
         break;
       case 'user-activity':
         result = await tools.getUserActivity(projectId, releaseId, { days });
+        break;
+      case 'list-cycles':
+        result = await tools.listCycles(releaseId);
+        break;
+      case 'get-cycle':
+        if (!options.cycleId) {
+          console.error('Error: --cycle is required for get-cycle.');
+          process.exit(1);
+        }
+        result = await tools.getCycle(options.cycleId);
         break;
         
       default:
