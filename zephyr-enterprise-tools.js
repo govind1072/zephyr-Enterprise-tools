@@ -1803,6 +1803,123 @@ export class QualityGates {
     };
   }
 
+  async getExecutionBurnup(projectId, releaseId, options = {}) {
+    const { startDate = null, endDate = null } = options;
+    const statusMap = await this.getTestResultStatusMap();
+
+    const executionsById = new Map();
+    let currentOffset = 0;
+    const pageSize = 10000;
+
+    while (true) {
+      const executionData = await this.GET('/execution', {
+        releaseid: releaseId,
+        offset: currentOffset,
+        pagesize: pageSize,
+        includeanyoneuser: true,
+      });
+      const page = executionData.results || executionData || [];
+
+      if (!Array.isArray(page) || page.length === 0) break;
+
+      const sizeBefore = executionsById.size;
+      for (const exec of page) executionsById.set(exec.id, exec);
+      currentOffset += page.length;
+
+      if (executionsById.size === sizeBefore) break;
+    }
+
+    const executions = [...executionsById.values()];
+    const total = executions.length;
+    const totalPlanned = total;
+
+    if (total === 0) {
+      return {
+        tool: 'Execution Burnup',
+        projectId,
+        releaseId,
+        timestamp: new Date().toISOString(),
+        total: 0,
+        totalPlanned: 0,
+        message: 'No executions found for this release.',
+        dailyBurnup: [],
+      };
+    }
+
+    const allDates = executions
+      .map(e => e.lastModifiedOn || e.createDatetime)
+      .filter(Boolean)
+      .map(d => new Date(d).toISOString().split('T')[0]);
+
+    const rangeStart = startDate || allDates.reduce((a, b) => (a < b ? a : b));
+    const rangeEnd = endDate || new Date().toISOString().split('T')[0];
+
+    const executedByDate = {};
+    for (const exec of executions) {
+      const rawDate = exec.lastModifiedOn || exec.createDatetime;
+      if (!rawDate) continue;
+      const dateKey = new Date(rawDate).toISOString().split('T')[0];
+      if (dateKey < rangeStart || dateKey > rangeEnd) continue;
+      if (!this.isExecutionStatus(exec, statusMap, "unexecuted")) {
+        executedByDate[dateKey] = (executedByDate[dateKey] || 0) + 1;
+      }
+    }
+
+    const days = [];
+    let current = new Date(rangeStart);
+    const end = new Date(rangeEnd);
+    let cumulativeExecuted = 0;
+
+    while (current <= end) {
+      const dateKey = current.toISOString().split('T')[0];
+      const executedToday = executedByDate[dateKey] || 0;
+      cumulativeExecuted += executedToday;
+
+      days.push({
+        date: dateKey,
+        executedToday,
+        cumulativeExecuted,
+        remaining: Math.max(0, total - cumulativeExecuted),
+        completionPct: Math.round((cumulativeExecuted / total) * 100),
+      });
+
+      current.setDate(current.getDate() + 1);
+    }
+
+    const totalDays = days.length;
+    const idealDailyBurnup = totalDays > 1 ? total / (totalDays - 1) : total;
+    const dailyBurnup = days.map((day, i) => ({
+      ...day,
+      ideal: Math.min(total, Math.round(idealDailyBurnup * i)),
+      scope: total,
+    }));
+
+    const lastDay = dailyBurnup[dailyBurnup.length - 1];
+    const behindBy = lastDay.ideal - lastDay.cumulativeExecuted;
+
+    return {
+      tool: 'Execution Burnup',
+      projectId,
+      releaseId,
+      timestamp: new Date().toISOString(),
+      dateRange: { from: rangeStart, to: rangeEnd },
+      total,
+      totalPlanned,
+      summary: {
+        totalExecutions: total,
+        executed: lastDay.cumulativeExecuted,
+        remaining: lastDay.remaining,
+        completionPct: lastDay.completionPct,
+        status: behindBy > 0
+          ? `⚠️ Behind ideal by ${behindBy} tests`
+          : behindBy < 0
+            ? `✅ Ahead of schedule by ${Math.abs(behindBy)} tests`
+            : '✅ On track',
+      },
+      dailyBurnup,
+    };
+  }
+
   // ─── User Trend (Audit Logs) ─────────────────────────────────────────────────
 
   async getUserTrend(options = {}) {

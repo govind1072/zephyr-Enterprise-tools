@@ -221,6 +221,34 @@ export interface ListUsersOptions {
   pageSize?: number;
 }
 
+export interface ExecutionChartOptions {
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
+export interface ExecutionBurnupDay {
+  date: string;
+  executedToday: number;
+  cumulativeExecuted: number;
+  remaining: number;
+  completionPct: number;
+  ideal: number;
+  scope: number;
+}
+
+export interface ExecutionBurnupResult {
+  tool: string;
+  projectId: number;
+  releaseId: number;
+  timestamp: string;
+  dateRange?: { from: string; to: string };
+  total: number;
+  totalPlanned: number;
+  summary?: Record<string, unknown>;
+  message?: string;
+  dailyBurnup: ExecutionBurnupDay[];
+}
+
 export interface ZephyrUser {
   id: number;
   fullName: string;
@@ -323,6 +351,8 @@ export declare class QualityGates {
   getTestCaseTrends(projectId: number, releaseId: number, options?: TrendsOptions): Promise<TestTrendsResult>;
   searchTestCases(projectId: number, releaseId: number, options?: SearchTestCasesOptions): Promise<SearchTestCasesResult>;
   getUserActivity(projectId: number, releaseId: number, options?: UserActivityOptions): Promise<UserActivityResult>;
+  getExecutionBurndown(projectId: number, releaseId: number, options?: ExecutionChartOptions): Promise<Record<string, unknown>>;
+  getExecutionBurnup(projectId: number, releaseId: number, options?: ExecutionChartOptions): Promise<ExecutionBurnupResult>;
   listUsers(projectId: number, options?: ListUsersOptions): Promise<ListUsersResult>;
   listCycles(releaseId: number): Promise<ListCyclesResult>;
   getCycle(cycleId: number): Promise<GetCycleResult>;

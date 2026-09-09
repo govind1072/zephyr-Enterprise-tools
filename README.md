@@ -11,6 +11,7 @@ Comprehensive tools for Zephyr Enterprise — Release Readiness, Project Health,
 | Tool | Description | Thresholds |
 |------|-------------|------------|
 | `release-readiness` | Run all 4 quality gates | Combined assessment |
+| `compare-releases` | Compare readiness across two releases | MCP/programmatic API |
 | `requirement-coverage` | Are requirements covered by tests? | ≥70% = GO |
 | `test-plan` | Are tests planned and assigned? | <80% = NO GO, 80–90% = CONDITIONAL, ≥90% = GO |
 | `test-execution` | Have tests been executed? | <90% = NO GO, 90–97% = CONDITIONAL, ≥97% = GO |
@@ -28,7 +29,10 @@ Comprehensive tools for Zephyr Enterprise — Release Readiness, Project Health,
 | `search-tests` | Search test cases by keyword query |
 | `user-activity` | User activity and productivity metrics |
 | `user-trend` | Full audit log history for a user — every action across the system, filterable by date range, entity type, and operation |
+| `execution-burnup` | Day-by-day execution burnup (cumulative executed vs ideal and total scope), supports optional date range filtering |
 | `execution-burndown` | Day-by-day execution burndown (remaining vs ideal), supports optional date range filtering |
+| `list-cycles` | List all test cycles for a release, including phases and execution status counts |
+| `get-cycle` | Get full details for a single test cycle |
 
 ---
 
@@ -66,6 +70,7 @@ Use `zephyr-enterprise-tools` as an MCP (Model Context Protocol) server with you
 | `list_projects` | _(none)_ | List all Zephyr projects |
 | `list_releases` | `projectId` | List releases for a project |
 | `release_readiness` | `projectId`, `releaseId` | Run all 4 quality gates |
+| `compare_releases` | `projectId`, `releaseId1`, `releaseId2`, `query?` _(ZQL)_ | Compare readiness between two releases in the same project |
 | `requirement_coverage` | `projectId`, `releaseId` | Check requirement coverage |
 | `test_plan_analysis` | `projectId`, `releaseId`, `query?` _(ZQL)_ | Analyze test planning status — supports ZQL filter e.g. `priority = "P1"` |
 | `test_execution` | `projectId`, `releaseId` | Check test execution progress |
@@ -77,13 +82,18 @@ Use `zephyr-enterprise-tools` as an MCP (Model Context Protocol) server with you
 | `search_test_cases` | `projectId`, `releaseId`, `query?`, `limit?` | Search test cases by keyword |
 | `user_activity` | `projectId`, `releaseId`, `days?` | Get user activity metrics |
 | `user_trend` | `userName`*, `fromDate?`, `toDate?`, `entity?`, `operation?`, `pageSize?`, `offset?` | Full audit log history for a user |
+| `execution_burnup` | `projectId`, `releaseId`, `startDate?`, `endDate?` | Day-by-day burnup chart data with cumulative executed, ideal, and scope counts |
 | `execution_burndown` | `projectId`, `releaseId`, `startDate?`, `endDate?` | Day-by-day burndown chart data |
+| `list_cycles` | `releaseId` | List all test cycles for a release, including phases and execution status counts |
+| `get_cycle` | `cycleId` | Get full details for a single test cycle, including phases |
 
 > **\* `user_trend` — `userName` must be the user's full email address** (e.g. `jane.doe@yourcompany.com`). Short names or display names will return 0 results. `pageSize` supports up to 1000 records per request.
 
 > **`test_plan_analysis` ZQL filter** — Use the `query` parameter to scope results to a specific priority, e.g. `priority = "P1"`. This is the recommended way to filter test plan metrics by priority. Note: `search_test_cases` accepts keyword queries but does not support ZQL priority filtering.
 
-> **`execution_burndown` date range** — Use `startDate` and `endDate` (format: `YYYY-MM-DD`) to scope the burndown to a specific period within the release window.
+> **Execution chart date range** — Use `startDate` and `endDate` (format: `YYYY-MM-DD`) to scope `execution_burnup` and `execution_burndown` to a specific period within the release window.
+
+> **Execution status IDs** — Test execution, failed tests, trends, user activity, burnup, burndown, and cycle status counts resolve status IDs from Zephyr v4 system preferences using `testresult.testresultStatus.LOV` from `/admin/preference/all/system`. Built-in IDs are used only as a fallback when the preference cannot be loaded or parsed.
 
 ---
 
@@ -179,6 +189,15 @@ zephyr-enterprise-tools -p 364 -r 4312 -t test-plan -q 'priority = "P1"'
 # Get trends for last 14 days
 zephyr-enterprise-tools -p 364 -r 4312 -t test-trends -d 14
 
+# Get execution burnup chart data
+zephyr-enterprise-tools -p 364 -r 4312 -t execution-burnup --start-date 2026-07-22 --end-date 2026-08-27
+
+# List all cycles and phase details for a release
+zephyr-enterprise-tools -p 364 -r 4312 -t list-cycles
+
+# Get one cycle by ID
+zephyr-enterprise-tools -p 364 -r 4312 -t get-cycle -c 98765
+
 # Get user audit log (full email required)
 zephyr-enterprise-tools -t user-trend --user jane.doe@yourcompany.com --page-size 1000
 
@@ -199,6 +218,7 @@ zephyr-enterprise-tools --help
 | `-q, --query <text>` | Keyword query (for `search-tests`) or ZQL expression (for `test-plan`) |
 | `-d, --days <n>` | Days for trends/activity (default: 30) |
 | `-l, --limit <n>` | Max results (default: 50) |
+| `-c, --cycle <id>` | Cycle ID for `get-cycle` |
 | `--user <email>` | Full email address for `user-trend` |
 | `--page-size <n>` | Records per page for `user-trend` (max: 1000) |
 | `--start-date <YYYY-MM-DD>` | Start date for `execution-burndown` |
@@ -230,6 +250,9 @@ const tools = new ZephyrEnterpriseTools({
 const report = await tools.runAllGates(364, 4312);
 console.log(report.overallStatus); // "GO" | "CONDITIONAL GO" | "NO GO"
 
+const comparison = await tools.compareReleases(364, 4312, 4313, { query: 'priority = "P1"' });
+console.log(comparison.overallStatusChanged); // true when release readiness status changed
+
 // Individual gates
 const coverage  = await tools.requirementCoverageGate(364, 4312);
 const planning  = await tools.testPlanAnalysisGate(364, 4312);
@@ -247,6 +270,14 @@ const reqCoverage = await tools.getRequirementCoverage(364, 4312);
 const trends      = await tools.getTestCaseTrends(364, 4312, { days: 14 });
 const results     = await tools.searchTestCases(364, 4312, { query: 'login' });
 const activity    = await tools.getUserActivity(364, 4312, { days: 30 });
+const cycles      = await tools.listCycles(4312);
+const cycle       = await tools.getCycle(98765);
+
+// Burnup with optional date range
+const burnup      = await tools.getExecutionBurnup(364, 4312, {
+  startDate: '2026-07-22',
+  endDate:   '2026-08-27',
+});
 
 // User audit log — full email address required; pageSize up to 1000
 const auditLog    = await tools.getUserTrend({

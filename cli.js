@@ -43,6 +43,8 @@ function parseArgs() {
     days: 30,
     limit: 50,
     cycleId: null,
+    startDate: null,
+    endDate: null,
   };
   
   for (let i = 0; i < args.length; i++) {
@@ -80,6 +82,12 @@ function parseArgs() {
       case '-c':
       case '--cycle':
         options.cycleId = Number(args[++i]);
+        break;
+      case '--start-date':
+        options.startDate = args[++i] || null;
+        break;
+      case '--end-date':
+        options.endDate = args[++i] || null;
         break;
       case '--json':
         options.format = 'json';
@@ -146,6 +154,8 @@ AVAILABLE TOOLS:
   │  test-trends           Test execution trends over time                      │
   │  search-tests          Search test cases by query                           │
   │  user-activity         User activity and productivity metrics               │
+  │  execution-burnup      Day-by-day execution burnup chart                    │
+  │  execution-burndown    Day-by-day execution burndown chart                  │
   │  list-cycles           List all cycles for a release with phase details      │
   │  get-cycle             Get full details for one cycle (-c <cycleId>)         │
   └─────────────────────────────────────────────────────────────────────────────┘
@@ -172,6 +182,9 @@ EXAMPLES:
 
   # Get user activity report
   zephyr-tools -p 364 -r 4312 -t user-activity
+
+  # Get execution burnup chart data
+  zephyr-tools -p 364 -r 4312 -t execution-burnup --start-date 2026-07-22 --end-date 2026-08-27
 
   # List all cycles and phase details for a release
   zephyr-tools -p 364 -r 4312 -t list-cycles
@@ -427,6 +440,17 @@ function formatGenericResult(result) {
     console.log('   └────────────┴───────┴────────┴────────┴─────────┘');
   }
 
+  if (result.dailyBurnup && result.dailyBurnup.length > 0) {
+    console.log('\n📈 DAILY BURNUP (last 10 days):');
+    console.log('   ┌────────────┬────────┬────────────┬───────┬───────┐');
+    console.log('   │ Date       │ Today  │ Cumulative │ Ideal │ Scope │');
+    console.log('   ├────────────┼────────┼────────────┼───────┼───────┤');
+    for (const day of result.dailyBurnup.slice(-10)) {
+      console.log(`   │ ${day.date} │ ${String(day.executedToday).padEnd(6)} │ ${String(day.cumulativeExecuted).padEnd(10)} │ ${String(day.ideal).padEnd(5)} │ ${String(day.scope).padEnd(5)} │`);
+    }
+    console.log('   └────────────┴────────┴────────────┴───────┴───────┘');
+  }
+
   // Cycles list/detail
   if (result.cycles && result.cycles.length > 0) {
     console.log(`\n🔁 CYCLES (${result.total || result.cycles.length}):`);
@@ -567,6 +591,18 @@ async function main() {
         break;
       case 'user-activity':
         result = await tools.getUserActivity(projectId, releaseId, { days });
+        break;
+      case 'execution-burnup':
+        result = await tools.getExecutionBurnup(projectId, releaseId, {
+          startDate: options.startDate,
+          endDate: options.endDate,
+        });
+        break;
+      case 'execution-burndown':
+        result = await tools.getExecutionBurndown(projectId, releaseId, {
+          startDate: options.startDate,
+          endDate: options.endDate,
+        });
         break;
       case 'list-cycles':
         result = await tools.listCycles(releaseId);

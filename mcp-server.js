@@ -198,6 +198,20 @@ const TOOLS = [
     },
   },
   {
+    name: 'execution_burnup',
+    description: 'Generate a day-by-day execution burnup chart for a release. Returns cumulative executed vs ideal and total scope counts for charting progress over time.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'number', description: 'Zephyr project ID' },
+        releaseId: { type: 'number', description: 'Zephyr release ID' },
+        startDate: { type: 'string', description: 'Burnup start date YYYY-MM-DD (default: earliest execution date)' },
+        endDate:   { type: 'string', description: 'Burnup end date YYYY-MM-DD (default: today)' },
+      },
+      required: ['projectId', 'releaseId'],
+    },
+  },
+  {
     name: 'user_trend',
     description: 'Get full audit log activity for a user — every action they performed across the system. Filter by date range and optionally by entity type (project or release).',
     inputSchema: {
@@ -369,6 +383,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'execution_burndown':
         result = await tools.getExecutionBurndown(projectId, releaseId, {
+          startDate: args.startDate || null,
+          endDate:   args.endDate   || null,
+        });
+        break;
+
+      case 'execution_burnup':
+        result = await tools.getExecutionBurnup(projectId, releaseId, {
           startDate: args.startDate || null,
           endDate:   args.endDate   || null,
         });
